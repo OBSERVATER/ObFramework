@@ -7,7 +7,7 @@ public class ResourceManageTest
 {
     internal class TestArchitecture : AArchitecture<TestArchitecture>
     {
-        public override void Init()
+        protected override void Init()
         {
             RegisterModel<ITestModel, TestModel>();
             RegisterSystem<ITestSystem, TestSystem>();

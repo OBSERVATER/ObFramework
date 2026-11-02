@@ -21,7 +21,19 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="UI\" />
+      <Folder Include="Asset\" />
+      <Folder Include="Core\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Asset\UIRoot.prefab" />
+      <EmbeddedResource Include="Asset\UIRoot.prefab">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <None Remove="Asset\UIRoot.prefab.meta" />
+      <EmbeddedResource Include="Asset\UIRoot.prefab.meta">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
     </ItemGroup>
 
 </Project>

@@ -70,7 +70,7 @@ namespace ObFramework.Core
                 Architecture._initialized = true;
             }
         }
-        public abstract void Init();
+        protected abstract void Init();
 
         public void Deinit()
         {
