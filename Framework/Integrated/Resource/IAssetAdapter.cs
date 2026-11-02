@@ -1,13 +1,17 @@
-﻿using ObFramework.Core;
+﻿using System.Threading;
 using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.Resource
 {
-    public interface IAssetAdapter : IReadAdapter<AssetLoadResult, AssetKey>, IAsyncReadAdapter<AssetLoadResult, AssetKey>
+    public interface IAssetAdapter<TNativeHandle>
     {
+        AssetLoadResult<T, TNativeHandle> Read<T>(AssetKey request) where T : class;
+        Task<AssetLoadResult<T, TNativeHandle>> ReadAsync<T>(AssetKey request, CancellationToken ct = default) where T : class;
+        void Release(TNativeHandle handle);
     }
-    public interface IRawFileAdapter
+
+    public interface IRawFileAdapter<TNativeHandle>
     {
-        Task<AssetLoadResult> ReadRawFileAsync(string location);
+        Task<AssetLoadResult<byte[], TNativeHandle>> ReadRawFileAsync(string location);
     }
 }

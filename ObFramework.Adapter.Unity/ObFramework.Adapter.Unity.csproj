@@ -12,6 +12,12 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Reference Include="Unity.Addressables">
+        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.Addressables.dll</HintPath>
+      </Reference>
+      <Reference Include="Unity.ResourceManager">
+        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.ResourceManager.dll</HintPath>
+      </Reference>
       <Reference Include="UnityEngine">
         <HintPath>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed\UnityEngine\UnityEngine.dll</HintPath>
       </Reference>
@@ -22,7 +28,6 @@
 
     <ItemGroup>
       <Folder Include="Asset\" />
-      <Folder Include="Core\" />
     </ItemGroup>
 
     <ItemGroup>

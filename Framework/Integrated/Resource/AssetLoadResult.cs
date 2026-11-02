@@ -1,15 +1,23 @@
-﻿using ObFramework.Integrated.Resource.Handle;
-namespace ObFramework.Integrated.Resource
+﻿namespace ObFramework.Integrated.Resource
 {
-    public readonly struct AssetLoadResult
+    public readonly struct AssetLoadResult<TAsset, TNativeHandle> where TAsset : class
     {
-        public readonly object Asset;
-        public readonly IHandle Handle;
+        public readonly TAsset Asset;
+        public readonly TNativeHandle? NativeHandle;
+        public readonly bool HasNativeHandle;
 
-        public AssetLoadResult(object asset, IHandle nativeHandle)
+        public AssetLoadResult(TAsset asset, TNativeHandle nativeHandle)
         {
             Asset = asset;
-            Handle = nativeHandle;
+            NativeHandle = nativeHandle;
+            HasNativeHandle = true;
+        }
+
+        public AssetLoadResult(TAsset asset)
+        {
+            Asset = asset;
+            NativeHandle = default;
+            HasNativeHandle = false;
         }
     }
 }

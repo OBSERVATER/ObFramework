@@ -6,7 +6,7 @@ namespace ObFramework.Integrated.Resource.Handle
     public interface IHandle : IDisposable
     {
         string Location { get; }
-        T Get<T>() where T : class;
+        T? Get<T>() where T : class;
     }
     public abstract class AHandle : IHandle
     {
@@ -25,7 +25,7 @@ namespace ObFramework.Integrated.Resource.Handle
             }
             Release();
         }
-        public abstract T Get<T>() where T : class;
+        public abstract T? Get<T>() where T : class;
         protected abstract void Release();
     }
 }
