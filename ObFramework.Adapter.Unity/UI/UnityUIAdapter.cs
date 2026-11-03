@@ -12,12 +12,13 @@ namespace ObFramework.Adapter.Unity.UI
 {
     public class UnityUIAdapter : IUIAdapter
     {
+        public UIRoot Root;
         private readonly Dictionary<IUIWindow, IHandle> _handles = new();
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default, IUIData? data = null) where T : class, IUIWindow 
             => await CreateAsync(typeof(T), ct, data) as T;
         public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default, IUIData? data = null)
         {
-            GameObject inst = null;
+            GameObject? inst = null;
             IHandle handle = null;
             try
             {
@@ -26,10 +27,12 @@ namespace ObFramework.Adapter.Unity.UI
                 var o = handle.Get<GameObject>();
                 inst = Object.Instantiate(o);
 
-                if (inst.GetComponent(type) is not IUIWindow component)
+                if (inst?.GetComponent(type) is not IUIWindow component)
                 {
                     throw new InvalidOperationException($"UI Prefab does not contain {type.FullName}");
                 }
+                // ReSharper disable once Unity.InstantiateWithoutParent
+                inst.transform.SetParent(GetParent(component.Level));
                 inst.SetActive(false);
                 component.Init(data);
                 _handles.Add(component, handle);
@@ -45,6 +48,7 @@ namespace ObFramework.Adapter.Unity.UI
         public void Open(IUIWindow instance, IUIData? data = null)
         {
             var go = ((Component)instance).gameObject;
+            go.transform.SetParent(GetParent(instance.Level));
             go.SetActive(true);
             instance.Open(data);
         }
@@ -66,6 +70,12 @@ namespace ObFramework.Adapter.Unity.UI
 
             handle.Dispose();
         }
-
+        private Transform GetParent(EUILevel level) => level switch
+        {
+            EUILevel.Scene => Root.SceneRoot,
+            EUILevel.Common => Root.CommonRoot,
+            EUILevel.Overlay => Root.PopupRoot,
+            _ => Root.CommonRoot
+        };
     }
 }
