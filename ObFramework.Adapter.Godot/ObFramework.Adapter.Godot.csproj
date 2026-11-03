@@ -17,4 +17,8 @@
       <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="Asset\UIRoot.tscn" />
+    </ItemGroup>
+
 </Project>
