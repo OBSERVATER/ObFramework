@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>9</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <Reference Include="GodotSharp">
+        <HintPath>..\..\..\Program Files\Godot\GodotSharp\Api\Release\GodotSharp.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Framework\ObFramework.csproj" />
+      <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Asset\UIRoot.tscn" />
+    </ItemGroup>
+
+</Project>
