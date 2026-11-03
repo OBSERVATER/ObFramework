@@ -9,8 +9,8 @@ namespace ObFramework.Integrated.UI
         /// <summary>
         /// 只负责创建实例，不负责显示
         /// </summary>
-        Task<T> CreateAsync<T>(CancellationToken ct,IUIData? data = null)where T : class, IUIWindow;
-        Task<IUIWindow> CreateAsync(Type type,CancellationToken ct,IUIData? data = null);
+        Task<T?> CreateAsync<T>(CancellationToken ct = default,IUIData? data = null)where T : class, IUIWindow;
+        Task<IUIWindow> CreateAsync(Type type,CancellationToken ct = default,IUIData? data = null);
         /// <summary>
         /// 显示实例
         /// </summary>

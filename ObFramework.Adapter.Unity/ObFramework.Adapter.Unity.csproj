@@ -12,6 +12,12 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Reference Include="Unity.Addressables">
+        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.Addressables.dll</HintPath>
+      </Reference>
+      <Reference Include="Unity.ResourceManager">
+        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.ResourceManager.dll</HintPath>
+      </Reference>
       <Reference Include="UnityEngine">
         <HintPath>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed\UnityEngine\UnityEngine.dll</HintPath>
       </Reference>
@@ -21,7 +27,18 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="UI\" />
+      <Folder Include="Asset\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Asset\UIRoot.prefab" />
+      <EmbeddedResource Include="Asset\UIRoot.prefab">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
+      <None Remove="Asset\UIRoot.prefab.meta" />
+      <EmbeddedResource Include="Asset\UIRoot.prefab.meta">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </EmbeddedResource>
     </ItemGroup>
 
 </Project>

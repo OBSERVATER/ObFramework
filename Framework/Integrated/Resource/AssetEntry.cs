@@ -1,15 +1,23 @@
-﻿using ObFramework.Integrated.Resource.Handle;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.Resource
 {
     public class AssetEntry
     {
         public AssetKey Key;
-        public IHandle Handle;
         public object Asset;
         public int RefCount;
+        internal TaskCompletionSource<bool> LoadingTask;
+    }
 
-        internal TaskCompletionSource<AssetLoadResult> LoadingTask;
+    internal sealed class AssetEntry<TNativeHandle> : AssetEntry
+    {
+        public TNativeHandle NativeHandle;
+        public bool HasNativeHandle;
+    }
+
+    internal interface IAssetEntryOwner
+    {
+        void ReleaseEntry(AssetEntry entry);
     }
 }

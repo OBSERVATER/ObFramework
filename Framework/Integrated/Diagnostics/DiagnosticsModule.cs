@@ -2,6 +2,7 @@
 using Serilog;
 using System;
 using System.IO;
+using Serilog.Core;
 
 namespace ObFramework.Integrated.Diagnostics
 {
@@ -14,20 +15,29 @@ namespace ObFramework.Integrated.Diagnostics
             var option = JsonConvert.DeserializeObject<DiagnosticsOption>(raw);
             Init(option);
         }
-        public static void Init(DiagnosticsOption option)
+        public static void Init(DiagnosticsOption option,ILogEventSink? extraSink = null!)
         {
             if (_logger != null)
             {
                 throw new InvalidOperationException("duplicate init");
             }
-            _logger = new LoggerConfiguration()
-                    .MinimumLevel.Is(option.MinLevel)
-                    .WriteTo.Async(sink => sink.File(Path.Combine(option.OutputDirPath, $"game-{DateTime.Now:yyyy-MM-dd HH:mm:ss}"),
-                    outputTemplate: "[{Timestamp:HH:mm:ss.fff}][{Level}][{SourceContext}]{Message:lj}{NewLine}{Exception}",
-                    fileSizeLimitBytes: (long)option.MaxFileSizeMB * 1024 * 1024,
-                    rollOnFileSizeLimit: true,
-                    retainedFileCountLimit: option.MaxFileCount))
-                    .CreateLogger();
+
+            var config = new LoggerConfiguration()
+                .MinimumLevel.Is(option.MinLevel)
+                .WriteTo.Async(sink =>
+                    sink.File(Path.Combine(option.OutputDirPath, $"game-{DateTime.Now:yyyy-MM-dd HH:mm:ss}"),
+                        outputTemplate:
+                        "[{Timestamp:HH:mm:ss.fff}][{Level}][{SourceContext}]{Message:lj}{NewLine}{Exception}",
+                        fileSizeLimitBytes: (long)option.MaxFileSizeMB*1024*1024,
+                        rollOnFileSizeLimit: true,
+                        retainedFileCountLimit: option.MaxFileCount));
+
+            if (extraSink != null)
+            {
+                config.WriteTo.Sink(extraSink);
+            }
+
+            _logger = config.CreateLogger();
         }
         public static ILogger GetLogger(string s) => _logger.ForContext("SourceContext",s);
         public static void Shutdown()

@@ -1,23 +1,28 @@
 ﻿using ObFramework.Integrated.Resource.Handle;
-using System.Diagnostics.CodeAnalysis;
+using System;
 using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.Resource
 {
-    public class ResModule
+    public static class ResModule
     {
         public static IAssetManager Mgr { get; private set; }
 
-        public static void Init([NotNull] IAssetAdapter adapter)
+        public static void Init<TNativeHandle>(IAssetAdapter<TNativeHandle> adapter)
         {
+            if (adapter == null)
+                throw new ArgumentNullException(nameof(adapter));
+
             if (Mgr != null)
-            {
                 return;
-            }
-            Mgr = new AssetManager(adapter);
+
+            Mgr = new AssetManager<TNativeHandle>(adapter);
         }
-        public static Task<IHandle> LoadAssetAsync<T>(string location) => Mgr.LoadAssetAsync<T>(location);
+
+        public static IHandle LoadAsset<T>(string location) where T : class => Mgr.LoadAsset<T>(location);
+        public static Task<IHandle> LoadAssetAsync<T>(string location) where T : class => Mgr.LoadAssetAsync<T>(location);
         public static Task<RawFileHandle> LoadRawFileAsync(string location) => Mgr.LoadRawFileAsync(location);
+
         public static void Deinit()
         {
             Mgr = null;

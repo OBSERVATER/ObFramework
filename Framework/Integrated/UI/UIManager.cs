@@ -9,14 +9,14 @@ namespace ObFramework.Integrated.UI
 {
     public interface IUIManager
     {
-        Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, CancellationToken cancellationToken = default)
+        Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single,EUILevel lvl = EUILevel.Common, CancellationToken cancellationToken = default)
             where T : class, IUIWindow;
         bool TryGet<T>(out T? instance) where T : class, IUIWindow;
         bool Close(IUIWindow instance);
         bool Close<T>() where T : class, IUIWindow;
         int CloseAll<T>() where T : class, IUIWindow;
-        void Push<T>(T ui) where T : IUIPanel;
-        Task<T?> Pop<T>() where T : class,IUIPanel;
+        void Push<T>(T ui) where T : IUIWindow;
+        Task<T?> Pop<T>() where T : class,IUIWindow;
     }
 
     internal sealed class UIManager : IUIManager
@@ -57,10 +57,10 @@ namespace ObFramework.Integrated.UI
 
         #region Open
 
-        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, 
+        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, EUILevel lvl = EUILevel.Common,
             CancellationToken cancellationToken = default) where T : class, IUIWindow 
-            => await OpenAsync(typeof(T),mode,cancellationToken) as T;
-        private async Task<IUIWindow?> OpenAsync(Type type,EUIOpenMode mode = EUIOpenMode.Single,
+            => await OpenAsync(typeof(T),mode,lvl,cancellationToken) as T;
+        private async Task<IUIWindow?> OpenAsync(Type type,EUIOpenMode mode = EUIOpenMode.Single,EUILevel lvl = EUILevel.Common,
             CancellationToken cancellationToken = default,IUIData? data = null)
         {
             await _gate.WaitAsync(cancellationToken);
@@ -354,13 +354,17 @@ namespace ObFramework.Integrated.UI
 
         #region Stack
 
-        public void Push<T>(T ui) where T : IUIPanel
+        public void Push<T>(T ui) where T : IUIWindow
         {
+            if (ui.Level != EUILevel.Common)
+            {
+                throw new InvalidOperationException("only common panel can push to stack");
+            }
             if (!TryFindActive(ui, out var key)) return;
             var entry = new UIStackEntry(key.Type, key.Data, key.Mode);
             if (Close(ui)) _stack.Push(entry);
         }
-        public async Task<T?> Pop<T>() where T : class, IUIPanel
+        public async Task<T?> Pop<T>() where T : class, IUIWindow
         {
             if (!_stack.TryPeek(out var entry)) return null;
             var panel = await OpenAsync(entry.PanelType, entry.Mode, data:entry.Data);
