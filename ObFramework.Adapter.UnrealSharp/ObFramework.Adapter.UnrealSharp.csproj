@@ -1,0 +1,60 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+        <LangVersion>12</LangVersion>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Framework\ObFramework.csproj" />
+      <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Analyzer Include="D:\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.SourceGenerators.dll"
+                  Private="false"
+                  CopyToPublishDirectory="Never" />
+        <Analyzer Include="D:\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.GlueGenerator.dll"
+                  Private="false"
+                  CopyToPublishDirectory="Never" />
+        <Analyzer Include="D:\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\Newtonsoft.Json.dll"
+                  Private="false"
+                  CopyToPublishDirectory="Never" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="UnrealSharp">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.Analyzers">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.Analyzers.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.Binds">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.Binds.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.CodeFixer">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.CodeFixer.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.Core">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.Core.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.GlueGenerator">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.GlueGenerator.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.Log">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.Log.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.Plugins">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.Plugins.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.SourceGenerators">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\netstandard2.0\UnrealSharp.SourceGenerators.dll</HintPath>
+      </Reference>
+      <Reference Include="UnrealSharp.StaticVars">
+        <HintPath>..\..\..\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.StaticVars.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+</Project>
