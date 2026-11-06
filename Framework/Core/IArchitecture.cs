@@ -74,7 +74,7 @@ namespace ObFramework.Core
 
         public void Deinit()
         {
-            _lifecycleService.Deinit(Architecture.Resolver);
+            _lifecycleService.Deinit();
             Resolver.Dispose();
             Architecture = null;
             _lifecycleService = null;

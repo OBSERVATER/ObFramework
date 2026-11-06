@@ -13,7 +13,7 @@ namespace ObFramework.Core
         void RegisterLocalService<I, T>(ICanRegisterService self) where I : IService where T : class, I;
 
         void Init(IObjectResolver resolver);
-        void Deinit(IObjectResolver resolver);
+        void Deinit();
 
         T GetLocalService<T>(ICanRegisterService self);
     }
@@ -24,6 +24,7 @@ namespace ObFramework.Core
         private IObjectResolver _root;
         private readonly Dictionary<ICanRegisterService, Dictionary<Type, Type>> _registrations;
         private readonly Dictionary<ICanRegisterService, IScopedObjectResolver> _scopes;
+        private readonly List<ICanInit> _initializedObjects = new();
         public ArchitectureLifecycleCoordinator(IContainerBuilder builder, IArchitecture architecture)
         {
             _builder = builder;
@@ -41,28 +42,58 @@ namespace ObFramework.Core
                 model.SetArchitecture(_architecture);
                 model.Init();
                 model.Initialized = true;
+                _initializedObjects.Add(model);
             }
             foreach (var system in systems)
             {
                 system.SetArchitecture(_architecture);
                 system.Init();
                 system.Initialized = true;
+                _initializedObjects.Add(system);
             }
         }
-        public void Deinit(IObjectResolver resolver)
+        public void Deinit()
         {
-            var models = resolver.Resolve<IEnumerable<IModel>>().Where(x => x.Initialized);
-            var systems = resolver.Resolve<IEnumerable<ISystem>>().Where(x => x.Initialized);
-            foreach (var system in systems)
+            var errors = new List<Exception>();
+
+            for (int i = _initializedObjects.Count - 1; i >= 0; i--)
             {
-                system.Deinit();
+                var instance = _initializedObjects[i];
+
+                try
+                {
+                    instance.Deinit();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(ex);
+                }
+                finally
+                {
+                    instance.Initialized = false;
+                }
             }
-            foreach (var model in models)
+
+            _initializedObjects.Clear();
+
+            foreach (var scope in _scopes.Values)
             {
-                model.Deinit();
+                try
+                {
+                    scope.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(ex);
+                }
             }
-            _registrations.Clear();
+
             _scopes.Clear();
+            _registrations.Clear();
+            _root = null!;
+
+            if (errors.Count > 0)
+                throw new AggregateException("Architecture lifecycle cleanup failed.", errors);
         }
         public void RegisterModel<I, T>() where I : IModel where T : class, I => _builder.Register<T>(Lifetime.Singleton).AsSelf().As<I>().As<IModel>();
         public void RegisterSystem<I, T>() where I : ISystem where T : class, I => _builder.Register<T>(Lifetime.Singleton).AsSelf().As<I>().As<ISystem>();
