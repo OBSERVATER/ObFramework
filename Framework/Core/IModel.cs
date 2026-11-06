@@ -2,7 +2,7 @@
 
 namespace ObFramework.Core
 {
-    public interface IModel : ICanGetModel, ICanGetSystem, ICanInit, ICanSetArchitecture, ICanRegisterEvent, ICanSendEvent, ICanQuery
+    public interface IModel : ICanGetPlugin, ICanGetModel, ICanGetSystem, ICanInit, ICanSetArchitecture, ICanRegisterEvent, ICanSendEvent, ICanQuery
     {
     }
     internal interface IModelSource
@@ -13,6 +13,7 @@ namespace ObFramework.Core
     {
         public bool Initialized { get; set; }
         private IArchitecture _architecture;
+        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
 
         void ICanInit.Init() => OnInit();
         void ICanInit.Deinit() => OnDeinit();

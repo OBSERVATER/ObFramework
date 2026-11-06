@@ -1,12 +1,12 @@
 ﻿using ObFramework.Core;
 using ObFramework.Integrated.UI;
-using UnrealSharp.Attributes;
 using UnrealSharp.UMG;
 
 namespace ObFramework.Adapter.UnrealSharp.UI;
 
 public abstract partial class AUIWindow : UUserWidget,IUIWindow
 {
+    public IPluginContext Plugins => GetArchitecture().Plugins;
     public abstract IArchitecture GetArchitecture();
     public abstract EUILevel Level { get; }
     void IUIWindow.Init(IUIData? uiData) => OnInit(uiData);

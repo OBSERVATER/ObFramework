@@ -35,7 +35,9 @@
     public interface ICanQuery : IBelongToArchitecture
     {
     }
-
+    public interface ICanGetPlugin : IBelongToArchitecture
+    {
+    }
     public interface ICanInit
     {
         bool Initialized { get; set; }

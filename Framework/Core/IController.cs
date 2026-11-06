@@ -1,6 +1,6 @@
 ﻿namespace ObFramework.Core
 {
-    public interface IController : IBelongToArchitecture, ICanSendCommand, ICanGetSystem, ICanGetModel, ICanRegisterEvent, ICanQuery, ICanSendEvent
+    public interface IController : ICanGetPlugin, IBelongToArchitecture, ICanSendCommand, ICanGetSystem, ICanGetModel, ICanRegisterEvent, ICanQuery, ICanSendEvent
     {
     }
 }

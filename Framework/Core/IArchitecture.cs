@@ -20,8 +20,9 @@ namespace ObFramework.Core
         T GetSystem<T>() where T : class, ISystem;
         T GetModel<T>() where T : class, IModel;
         T GetLocalService<T>(ICanRegisterService self) where T : class, IService;
+        IPluginContext Plugins { get; }
+        
         IRuntimeDataGroup<TResult> SendQuery<TQuery, TResult>(bool refresh = false) where TQuery : class, IQuery<TResult>, new() where TResult : class, IRuntimeData;
-
         void SendCommand<T>(T command) where T : ICommand;
         TResult SendCommand<TResult>(ICommand<TResult> command);
         ValueTask SendCommandAsync<T>(T command, CancellationToken ct = default) where T : IAsyncCommand;
@@ -38,6 +39,8 @@ namespace ObFramework.Core
         protected IObjectResolver Resolver;
         private IArchitectureLifecycleCoordinator _lifecycleService;
         private bool _initialized = false;
+        private IPluginContext? _plugins;
+        public IPluginContext Plugins => _plugins ?? throw new InvalidOperationException("Architecture has no plugin context.");
 
         public bool Initialized => _initialized;
         public static IArchitecture Arch
@@ -51,33 +54,74 @@ namespace ObFramework.Core
                 return Architecture!;
             }
         }
-        public static void InitInterface()
+        public static void InitInterface() => Initialize(null);
+
+        public static void InitInterface(IPluginContext plugins)
         {
-            if (Architecture == null)
+            switch (plugins)
             {
-                Architecture = new T();
-                var builder = new ContainerBuilder();
-                Architecture._lifecycleService = new ArchitectureLifecycleCoordinator(builder, Architecture);
+                case null:
+                    throw new ArgumentNullException(nameof(plugins));
+                case PluginHost.PluginContext context:
+                    context.EnsureReady();
+                    break;
+            }
 
+            Initialize(plugins);
+        }
+
+        private static void Initialize(IPluginContext? plugins)
+        {
+            if (Architecture != null)
+            {
+                if (!ReferenceEquals(Architecture._plugins, plugins))
+                    throw new InvalidOperationException("Architecture is already initialized with a different plugin context.");
+                return;
+            }
+            var architecture = new T();
+            Architecture = architecture;
+            architecture._plugins = plugins;
+            var builder = new ContainerBuilder();
+            architecture._lifecycleService = new ArchitectureLifecycleCoordinator(builder, architecture);
+            try
+            {
                 builder.RegisterNuGetMessagePipe();
-                builder.RegisterInstance<IArchitecture>(Architecture);
+                builder.RegisterInstance<IArchitecture>(architecture);
+                if (plugins != null)
+                    builder.RegisterInstance<IPluginContext>(plugins);
                 RegisterServiceInternal();
-
-                Architecture.Init();
-
-                Architecture.Resolver = builder.Build();
-                Architecture._lifecycleService.Init(Architecture.Resolver);
-                Architecture._initialized = true;
+                architecture.Init();
+                architecture.Resolver = builder.Build();
+                architecture._lifecycleService.Init(architecture.Resolver);
+                architecture._initialized = true;
+            }
+            catch (Exception error)
+            {
+                try { architecture.Deinit(); }
+                catch (Exception cleanupError) { error.Data["ArchitectureCleanupError"] = cleanupError; }
+                throw;
             }
         }
         protected abstract void Init();
 
         public void Deinit()
         {
-            _lifecycleService.Deinit();
-            Resolver.Dispose();
-            Architecture = null;
-            _lifecycleService = null;
+            var errors = new List<Exception>();
+            try { _lifecycleService?.Deinit(); }
+            catch (Exception error) { errors.Add(error); }
+            try { Resolver?.Dispose(); }
+            catch (Exception error) { errors.Add(error); }
+            finally
+            {
+                if (ReferenceEquals(Architecture, this))
+                    Architecture = null!;
+                _lifecycleService = null!;
+                Resolver = null!;
+                _plugins = null;
+                _initialized = false;
+            }
+            if (errors.Count > 0)
+                throw new AggregateException("Architecture cleanup failed.", errors);
         }
 
         public IDisposable RegisterEvent<T1>(Action<T1> onEvent) where T1 : struct => Resolver.Resolve<IEventBus>().Register(onEvent);
@@ -115,7 +159,7 @@ namespace ObFramework.Core
         IRuntimeDataGroup<TResult> IArchitecture.SendQuery<TQuery, TResult>(bool refresh = false) => Resolver.Resolve<IQueryService>().SendQuery<TQuery, TResult>(refresh);
         T1 IArchitecture.GetLocalService<T1>(ICanRegisterService self) => _lifecycleService.GetLocalService<T1>(self);
 
-        private void RegisterPubService<I, T1>() where I : IService where T1 : class, I => _lifecycleService.RegisterPubService<I, T1>();
+        protected void RegisterPubService<I, T1>() where I : IService where T1 : class, I => _lifecycleService.RegisterPubService<I, T1>();
         public void RegisterLocalService<I, T1>(ICanRegisterService self) where I : IService where T1 : class, I => _lifecycleService.RegisterLocalService<I, T1>(self);
         public IEnumerable<IModel> GetModelInsts() => Resolver.Resolve<IEnumerable<IModel>>();
         private static void RegisterServiceInternal()
