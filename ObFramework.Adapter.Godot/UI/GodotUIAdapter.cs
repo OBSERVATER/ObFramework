@@ -10,13 +10,13 @@ namespace ObFramework.Adapter.Godot.UI
     public class GodotUIAdapter : IUIAdapter
     {
         public UIRoot Root;
-        public async Task<T?> CreateAsync<T>(CancellationToken ct = default, IUIData? data = null)
+        public async Task<T?> CreateAsync<T>(CancellationToken ct = default)
             where T : class, IUIWindow
         {
-            return await CreateAsync(typeof(T), ct, data) as T;
+            return await CreateAsync(typeof(T), ct) as T;
         }
 
-        public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default, IUIData? data = null)
+        public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default)
         {
             if (type == null)
                 throw new ArgumentNullException(nameof(type));
@@ -48,7 +48,7 @@ namespace ObFramework.Adapter.Godot.UI
 
                 var parent = GetParent(window.Level);
                 parent.AddChild(control);
-                window.Init(data);
+                window.Init();
 
                 return window;
             }

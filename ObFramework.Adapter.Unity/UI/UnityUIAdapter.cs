@@ -14,9 +14,9 @@ namespace ObFramework.Adapter.Unity.UI
     {
         public UIRoot Root;
         private readonly Dictionary<IUIWindow, IHandle> _handles = new();
-        public async Task<T?> CreateAsync<T>(CancellationToken ct = default, IUIData? data = null) where T : class, IUIWindow 
-            => await CreateAsync(typeof(T), ct, data) as T;
-        public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default, IUIData? data = null)
+        public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
+            => await CreateAsync(typeof(T), ct) as T;
+        public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default)
         {
             GameObject? inst = null;
             IHandle handle = null;
@@ -34,7 +34,7 @@ namespace ObFramework.Adapter.Unity.UI
                 // ReSharper disable once Unity.InstantiateWithoutParent
                 inst.transform.SetParent(GetParent(component.Level));
                 inst.SetActive(false);
-                component.Init(data);
+                component.Init();
                 _handles.Add(component, handle);
                 return component;
             }

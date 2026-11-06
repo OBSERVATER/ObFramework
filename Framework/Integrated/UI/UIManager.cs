@@ -9,106 +9,81 @@ namespace ObFramework.Integrated.UI
 {
     public interface IUIManager
     {
-        Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single,EUILevel lvl = EUILevel.Common, CancellationToken cancellationToken = default)
-            where T : class, IUIWindow;
+        Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow;
         bool TryGet<T>(out T? instance) where T : class, IUIWindow;
         bool Close(IUIWindow instance);
         bool Close<T>() where T : class, IUIWindow;
         int CloseAll<T>() where T : class, IUIWindow;
         void Push<T>(T ui) where T : IUIWindow;
-        Task<T?> Pop<T>() where T : class,IUIWindow;
+        Task<T?> Pop<T>() where T : class, IUIWindow;
     }
 
     internal sealed class UIManager : IUIManager
     {
         private readonly IUIAdapter _adapter;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
-
-        // 当前活跃实例
         private readonly Dictionary<Type, List<UIKey>> _active = new();
-
-        // 全局 LRU 缓存
         private readonly LRUCache<int, UIKey> _cache;
         private readonly Dictionary<Type, List<int>> _idCacheMap = new();
+        private readonly Stack<UIStackEntry> _stack = new();
         private int _serialId;
-        private readonly Stack<UIStackEntry> _stack;
 
         public UIManager(IUIAdapter adapter, int cacheCapacity = 16)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _cache = new LRUCache<int, UIKey>(cacheCapacity, OnCacheRemoved);
-            _stack = new Stack<UIStackEntry>();
         }
 
-        #region SerialId
-
-        private int NextSerialId
-        {
-            get
-            {
-                checked
-                {
-                    return ++_serialId;
-                }
-            }
-        }
-
-        #endregion
+        private int NextSerialId => checked(++_serialId);
 
         #region Open
 
-        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, EUILevel lvl = EUILevel.Common,
-            CancellationToken cancellationToken = default) where T : class, IUIWindow 
-            => await OpenAsync(typeof(T),mode,lvl,cancellationToken) as T;
-        private async Task<IUIWindow?> OpenAsync(Type type,EUIOpenMode mode = EUIOpenMode.Single,EUILevel lvl = EUILevel.Common,
-            CancellationToken cancellationToken = default,IUIData? data = null)
+        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow
+            => await OpenAsync(typeof(T), mode, cancellationToken, data) as T;
+
+        private async Task<IUIWindow?> OpenAsync(Type type, EUIOpenMode mode = EUIOpenMode.Single, CancellationToken cancellationToken = default, IUIData? data = null)
         {
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                IUIWindow? instance;
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (mode != EUIOpenMode.Single && mode != EUIOpenMode.Multiple)
-                {
                     throw new ArgumentOutOfRangeException(nameof(mode));
-                }
-                // Single：优先返回当前活跃实例
+
                 if (mode == EUIOpenMode.Single && TryGetLatestActive(type, out var activeKey))
                 {
-                    instance = activeKey.Instance;
-                    var newKey = new UIKey(activeKey.Type, instance,activeKey.SerialId, activeKey.Mode, data);
-                    _active[type][^1] = newKey;
-                    _adapter.Open(instance);
-                    return instance;
+                    try
+                    {
+                        _adapter.Open(activeKey.Instance, data);
+                    }
+                    catch
+                    {
+                        RemoveActive(activeKey);
+                        _adapter.Release(activeKey.Instance);
+                        throw;
+                    }
+
+                    _active[type][^1] = new UIKey(activeKey.Type, activeKey.Instance, activeKey.SerialId, activeKey.Mode, data);
+                    return activeKey.Instance;
                 }
 
-                // 每次开启新的使用周期分配新 ID
                 int serialId = NextSerialId;
+                IUIWindow instance;
 
-                // 优先从缓存获取实例
-                if (TryTakeCached(type, out UIKey cachedKey))
+                if (TryTakeCached(type, out var cachedKey))
                 {
                     instance = cachedKey.Instance;
-
-                    if (instance == null)
-                    {
-                        _adapter.Release(cachedKey.Instance);
-                        throw new InvalidOperationException("Cached UI instance has an invalid type.");
-                    }
                 }
                 else
                 {
-                    // 缓存未命中，创建实例
-                    instance = await _adapter.CreateAsync(type,cancellationToken);
-
-                    if (instance == null)
-                    {
-                        throw new InvalidOperationException($"Failed to create UI: {type.FullName}");
-                    }
+                    instance = await _adapter.CreateAsync(type, cancellationToken);
                 }
 
-                var key = new UIKey(type, instance, serialId,mode,data);
+                if (instance == null)
+                    throw new InvalidOperationException($"Failed to create UI: {type.FullName}");
+
+                var key = new UIKey(type, instance, serialId, mode, data);
                 bool added = false;
 
                 try
@@ -116,13 +91,14 @@ namespace ObFramework.Integrated.UI
                     cancellationToken.ThrowIfCancellationRequested();
                     AddActive(key);
                     added = true;
-                    _adapter.Open(instance,data);
+                    _adapter.Open(instance, data);
                     return instance;
                 }
                 catch
                 {
-                    if (added) RemoveActive(key);
-                    // Release 必须能够处理尚未成功显示的实例
+                    if (added)
+                        RemoveActive(key);
+
                     _adapter.Release(instance);
                     throw;
                 }
@@ -149,10 +125,9 @@ namespace ObFramework.Integrated.UI
 
         public int CloseAll<T>() where T : class, IUIWindow
         {
-            var type = typeof(T);
-
-            if (!_active.TryGetValue(type, out var keys))
+            if (!_active.TryGetValue(typeof(T), out var keys))
                 return 0;
+
             var snapshot = keys.ToArray();
             return snapshot.Count(MoveToCache);
         }
@@ -187,12 +162,12 @@ namespace ObFramework.Integrated.UI
         {
             foreach (var pair in _active)
             {
-                var list = pair.Value;
-
-                foreach (var t in list)
+                foreach (var item in pair.Value)
                 {
-                    if (!ReferenceEquals(t.Instance, instance)) continue;
-                    key = t;
+                    if (!ReferenceEquals(item.Instance, instance))
+                        continue;
+
+                    key = item;
                     return true;
                 }
             }
@@ -208,19 +183,14 @@ namespace ObFramework.Integrated.UI
         private void AddActive(UIKey key)
         {
             if (key.Type == null || key.Instance == null || key.SerialId <= 0)
-            {
                 throw new ArgumentException("Invalid UIKey.");
-            }
 
-            // 检查所有类型，避免同一实例被重复登记
             foreach (var pair in _active)
             {
                 foreach (var item in pair.Value)
                 {
                     if (item.SerialId == key.SerialId || ReferenceEquals(item.Instance, key.Instance))
-                    {
                         throw new InvalidOperationException("Duplicate active UI instance.");
-                    }
                 }
             }
 
@@ -241,11 +211,8 @@ namespace ObFramework.Integrated.UI
             for (int i = 0; i < list.Count; i++)
             {
                 var item = list[i];
-
                 if (item.SerialId != key.SerialId || !ReferenceEquals(item.Instance, key.Instance))
-                {
                     continue;
-                }
 
                 list.RemoveAt(i);
 
@@ -264,30 +231,21 @@ namespace ObFramework.Integrated.UI
 
         private bool MoveToCache(UIKey key)
         {
-            // 先结束 UI 生命周期
-            _adapter.Close(key.Instance);
-
             if (!RemoveActive(key))
-            {
-                _adapter.Open(key.Instance);
-                throw new InvalidOperationException("Failed to remove active UI.");
-            }
+                return false;
 
             try
             {
-                // 先更新辅助索引
+                _adapter.Close(key.Instance);
                 AddCachedIndex(key);
                 _cache.Add(key.SerialId, key);
-
                 return true;
             }
             catch
             {
-                // 缓存登记失败，恢复 Active
+                _cache.Remove(key.SerialId, false);
                 RemoveCachedIndex(key.SerialId, key.Type);
-                AddActive(key);
-                _adapter.Open(key.Instance);
-
+                _adapter.Release(key.Instance);
                 throw;
             }
         }
@@ -295,25 +253,19 @@ namespace ObFramework.Integrated.UI
         private bool TryTakeCached(Type type, out UIKey key)
         {
             key = default;
-
             if (!_idCacheMap.TryGetValue(type, out var ids))
                 return false;
 
-            // 最近关闭的实例优先复用
             while (ids.Count > 0)
             {
-                int index = ids.Count - 1;
-                int id = ids[index];
+                int id = ids[^1];
 
                 if (_cache.TryTake(id, out key))
                 {
-                    // TryTake 不触发 LRU 回调
                     RemoveCachedIndex(id, type);
-
                     return true;
                 }
 
-                // 清理失效索引
                 RemoveCachedIndex(id, type);
             }
 
@@ -331,7 +283,6 @@ namespace ObFramework.Integrated.UI
             list.Add(key.SerialId);
         }
 
-        // 只清理辅助索引，不释放实例
         private void RemoveCachedIndex(int id, Type type)
         {
             if (!_idCacheMap.TryGetValue(type, out var list))
@@ -343,7 +294,6 @@ namespace ObFramework.Integrated.UI
                 _idCacheMap.Remove(type);
         }
 
-        // LRU 真正移除缓存条目时调用
         private void OnCacheRemoved(int id, UIKey key)
         {
             RemoveCachedIndex(id, key.Type);
@@ -357,23 +307,33 @@ namespace ObFramework.Integrated.UI
         public void Push<T>(T ui) where T : IUIWindow
         {
             if (ui.Level != EUILevel.Common)
-            {
-                throw new InvalidOperationException("only common panel can push to stack");
-            }
-            if (!TryFindActive(ui, out var key)) return;
+                throw new InvalidOperationException("Only Common windows can be pushed onto the stack.");
+
+            if (!TryFindActive(ui, out var key))
+                return;
+
             var entry = new UIStackEntry(key.Type, key.Data, key.Mode);
-            if (Close(ui)) _stack.Push(entry);
+
+            if (MoveToCache(key))
+                _stack.Push(entry);
         }
+
         public async Task<T?> Pop<T>() where T : class, IUIWindow
         {
-            if (!_stack.TryPeek(out var entry)) return null;
-            var panel = await OpenAsync(entry.PanelType, entry.Mode, data:entry.Data);
-            if (panel == null) return null;
+            if (!_stack.TryPeek(out var entry))
+                return null;
+
+            if (!typeof(T).IsAssignableFrom(entry.PanelType))
+                throw new InvalidOperationException($"Stack top is {entry.PanelType.Name}, not {typeof(T).Name}.");
+
+            var panel = await OpenAsync(entry.PanelType, entry.Mode, data: entry.Data);
+            if (panel == null)
+                return null;
+
             _stack.Pop();
-            return panel as T;
+            return (T)panel;
         }
 
         #endregion
-
     }
 }

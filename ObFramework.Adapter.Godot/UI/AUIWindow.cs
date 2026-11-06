@@ -7,7 +7,7 @@ namespace ObFramework.Adapter.Godot.UI
     public abstract class AUIWindow : Control,IUIWindow
     {
         public abstract IArchitecture GetArchitecture();
-        public EUILevel Level { get; }
+        public abstract EUILevel Level { get; }
         void IUIWindow.Init(IUIData? uiData) => OnInit(uiData);
         void IUIWindow.Open(IUIData? uiData) => OnOpen(uiData);
         void IUIWindow.Close() => OnClose();

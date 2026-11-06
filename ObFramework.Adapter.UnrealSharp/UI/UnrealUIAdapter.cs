@@ -71,10 +71,10 @@ public class UnrealUIAdapter : IUIAdapter
         }
     }
 
-    public async Task<T?> CreateAsync<T>(CancellationToken ct = default, IUIData? data = null) where T : class, IUIWindow 
-        => await CreateAsync(typeof(T), ct, data) as T;
+    public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
+        => await CreateAsync(typeof(T), ct) as T;
 
-    public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default, IUIData? data = null)
+    public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(type);
 
@@ -113,7 +113,7 @@ public class UnrealUIAdapter : IUIAdapter
 
         try
         {
-            window.Init(data);
+            window.Init();
             ct.ThrowIfCancellationRequested();
             _retained.Add(window, handle);
 

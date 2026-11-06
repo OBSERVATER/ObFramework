@@ -15,9 +15,9 @@ namespace ObFramework.Integrated.UI
 
             UIMgr = new UIManager(adapter, cachedCapacity);
         }
-        public static async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single,EUILevel lvl = EUILevel.Common,
+        public static async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData data = null,
             CancellationToken cancellationToken = default) where T : class, IUIWindow
-            => await UIMgr.OpenAsync<T>(mode,lvl, cancellationToken);
+            => await UIMgr.OpenAsync<T>(mode,data, cancellationToken);
         public static bool TryGet<T>(out T instance) where T : class, IUIWindow => UIMgr.TryGet<T>(out instance);
         public static bool Close(IUIWindow instance) => UIMgr.Close(instance);
         public static bool Close<T>() where T : class, IUIWindow => UIMgr.Close<T>();
