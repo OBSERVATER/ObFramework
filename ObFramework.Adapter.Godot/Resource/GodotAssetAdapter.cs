@@ -17,7 +17,7 @@ namespace ObFramework.Adapter.Godot.Resource
             {
                 throw new FileNotFoundException($"Resource not found: {request.Location}");
             }
-            var result = new AssetLoadResult<T, global::Godot.Resource>(raw,null);
+            var result = new AssetLoadResult<T, global::Godot.Resource>(raw);
             return result;
         }
         public async Task<AssetLoadResult<T, global::Godot.Resource>> ReadAsync<T>(AssetKey request, CancellationToken ct = default) where T : class
@@ -43,7 +43,7 @@ namespace ObFramework.Adapter.Godot.Resource
             var raw = ResourceLoader.LoadThreadedGet(request.Location);
             return raw is not T resource ? 
                 throw new InvalidCastException($"Resource {request.Location} cannot be converted to {typeof(T).Name}") 
-                : new AssetLoadResult<T, global::Godot.Resource>(resource, null);
+                : new AssetLoadResult<T, global::Godot.Resource>(resource);
         }
         public void Release(global::Godot.Resource handle)
         {
@@ -61,7 +61,7 @@ namespace ObFramework.Adapter.Godot.Resource
                 }
 
                 var bytes = file.GetBuffer((long)file.GetLength());
-                return new AssetLoadResult<byte[], global::Godot.Resource>(bytes, null);
+                return new AssetLoadResult<byte[], global::Godot.Resource>(bytes);
             });
         }
 

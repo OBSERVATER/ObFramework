@@ -7,7 +7,7 @@ namespace ObFramework.Integrated.Resource
         public AssetKey Key;
         public object Asset;
         public int RefCount;
-        internal TaskCompletionSource<bool> LoadingTask;
+        internal TaskCompletionSource<bool>? LoadingTask;
     }
 
     internal sealed class AssetEntry<TNativeHandle> : AssetEntry

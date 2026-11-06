@@ -10,11 +10,8 @@ namespace ObFramework.Adapter.Godot.UI
     public class GodotUIAdapter : IUIAdapter
     {
         public UIRoot Root;
-        public async Task<T?> CreateAsync<T>(CancellationToken ct = default)
-            where T : class, IUIWindow
-        {
-            return await CreateAsync(typeof(T), ct) as T;
-        }
+        public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
+            => await CreateAsync(typeof(T), ct) as T;
 
         public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default)
         {
@@ -37,9 +34,7 @@ namespace ObFramework.Adapter.Godot.UI
                 var scene = handle.Get<PackedScene>();
                 node = scene.Instantiate();
 
-                if (node is not Control control ||
-                    node is not IUIWindow window ||
-                    !type.IsInstanceOfType(window))
+                if (node is not Control control || node is not IUIWindow window || !type.IsInstanceOfType(window))
                 {
                     throw new InvalidOperationException($"Scene {location} root must implement {type.Name} and inherit Control.");
                 }

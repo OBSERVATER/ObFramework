@@ -36,7 +36,7 @@ namespace ObFramework.Integrated.Resource
             {
                 if (_handlerMap.TryGetValue(key, out entry))
                 {
-                    if (entry.LoadingTask != null)
+                    if (entry.LoadingTask != null || !entry.HasNativeHandle)
                         throw new InvalidOperationException($"Asset is loading asynchronously: {location}");
 
                     entry.RefCount++;
@@ -45,7 +45,7 @@ namespace ObFramework.Integrated.Resource
 
                 source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 entry = new AssetEntry<TNativeHandle> { Key = key, RefCount = 1, LoadingTask = source };
-                _handlerMap.Add(key, entry);
+                _handlerMap.Add(key, entry!);
             }
 
             AssetLoadResult<T, TNativeHandle> result = default;
@@ -61,7 +61,6 @@ namespace ObFramework.Integrated.Resource
                 {
                     entry.Asset = result.Asset;
                     entry.NativeHandle = result.NativeHandle;
-                    entry.HasNativeHandle = true;
                     entry.LoadingTask = null;
                 }
 
@@ -159,10 +158,7 @@ namespace ObFramework.Integrated.Resource
             try
             {
                 result = await loader();
-                bool valid = entry.Key.Operation == RawFileMethod ? 
-                    result.Asset is byte[] : result is { HasNativeHandle: true };
-
-                if (!valid)
+                if (result.Asset == null)
                     throw new InvalidOperationException($"Failed to load resource: {entry.Key.Location}");
 
                 lock (_gate)
