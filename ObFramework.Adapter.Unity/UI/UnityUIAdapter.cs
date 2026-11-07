@@ -13,6 +13,8 @@ namespace ObFramework.Adapter.Unity.UI
     public class UnityUIAdapter : IUIAdapter
     {
         public UIRoot Root;
+        private readonly IAssetManager _assets;
+        public UnityUIAdapter(IAssetManager assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         private readonly Dictionary<IUIWindow, IHandle> _handles = new();
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
             => await CreateAsync(typeof(T), ct) as T;
@@ -22,7 +24,7 @@ namespace ObFramework.Adapter.Unity.UI
             IHandle handle = null;
             try
             {
-                handle = await ResModule.LoadAssetAsync<GameObject>(type.Name);
+                handle = await _assets.LoadAssetAsync<GameObject>(type.Name);
                 ct.ThrowIfCancellationRequested();
                 var o = handle.Get<GameObject>();
                 inst = Object.Instantiate(o);

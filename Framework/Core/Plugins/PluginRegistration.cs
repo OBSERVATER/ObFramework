@@ -33,6 +33,17 @@ namespace ObFramework.Core
             GetRegistration<TImplementation>().As<TInterface>();
         }
 
+        public void Export<TInterface, TImplementation>(Func<IObjectResolver, TImplementation> factory) where TInterface : class where TImplementation : class, TInterface
+        {
+            EnsureMutable();
+            if (factory == null)
+                throw new ArgumentNullException(nameof(factory));
+            AddExport(typeof(TInterface));
+            Reserve(typeof(TImplementation));
+            var registration = _builder.Register<TImplementation>(factory, Lifetime.Singleton).AsSelf().As<TInterface>();
+            _registrations.Add(typeof(TImplementation), registration);
+        }
+
         public void ExportInstance<TInterface>(TInterface instance) where TInterface : class
         {
             EnsureMutable();
@@ -78,8 +89,7 @@ namespace ObFramework.Core
             if (typeof(IPlugin).IsAssignableFrom(type) || type == typeof(IPluginContext))
                 throw new InvalidOperationException($"{type.FullName} is a lifecycle contract, not a plugin capability.");
             Reserve(type);
-            if (!_descriptor.Exports.Add(type))
-                throw new InvalidOperationException($"Plugin {_descriptor.Plugin.GetType().FullName} exports {type.FullName} more than once.");
+            _descriptor.Exports.Add(type);
         }
 
         private void Reserve(Type type)
@@ -108,7 +118,7 @@ namespace ObFramework.Core
         internal readonly HashSet<Type> Exports = new HashSet<Type>();
         internal readonly HashSet<Type> Dependencies = new HashSet<Type>();
         internal IPluginContext Context = null!;
-        internal volatile bool Ready;
+        internal bool Ready;
         internal bool Entered;
 
         internal PluginDescriptor(IPlugin plugin) => Plugin = plugin;

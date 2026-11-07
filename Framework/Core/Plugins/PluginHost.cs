@@ -9,14 +9,13 @@ namespace ObFramework.Core
     public sealed class PluginHost
     {
         private enum HostState { Created, Starting, Ready, Stopping, Closed, Failed }
-        private readonly object _sync = new object();
         private readonly List<PluginDescriptor> _plugins = new List<PluginDescriptor>();
         private readonly Dictionary<Type, PluginDescriptor> _providers = new Dictionary<Type, PluginDescriptor>();
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private List<PluginDescriptor> _ordered = new List<PluginDescriptor>();
         private IObjectResolver? _resolver;
-        private volatile HostState _state;
-        private volatile bool _stopRequested;
+        private HostState _state;
+        private bool _stopRequested;
         private Task? _startTask;
         private Task? _stopTask;
         public IPluginContext Context { get; }
@@ -32,32 +31,18 @@ namespace ObFramework.Core
 
         public Task StartAsync(CancellationToken ct = default)
         {
-            TaskCompletionSource<bool> completion;
-            lock (_sync)
-            {
-                if (_state != HostState.Created || _stopRequested)
-                    throw new InvalidOperationException("PluginHost can only be started once.");
-                _state = HostState.Starting;
-                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _startTask = completion.Task;
-            }
-            _ = StartCoreAsync(ct, completion);
-            return completion.Task;
+            if (_state != HostState.Created || _stopRequested)
+                throw new InvalidOperationException("PluginHost can only be started once.");
+            _state = HostState.Starting;
+            return _startTask = StartCoreAsync(ct);
         }
 
         public Task StopAsync()
         {
-            TaskCompletionSource<bool> completion;
-            lock (_sync)
-            {
-                if (_stopTask != null)
-                    return _stopTask;
-                _stopRequested = true;
-                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _stopTask = completion.Task;
-            }
-            _ = StopCoreAsync(completion);
-            return completion.Task;
+            if (_stopTask != null)
+                return _stopTask;
+            _stopRequested = true;
+            return _stopTask = StopCoreAsync();
         }
 
         internal sealed class PluginContext : IPluginContext
@@ -93,7 +78,7 @@ namespace ObFramework.Core
             }
         }
 
-        private async Task StartCoreAsync(CancellationToken ct, TaskCompletionSource<bool> completion)
+        private async Task StartCoreAsync(CancellationToken ct)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _shutdown.Token);
             try
@@ -113,11 +98,7 @@ namespace ObFramework.Core
                     try { descriptor.Plugin.Register(registration); }
                     finally { registration.Freeze(); }
                     foreach (var capability in descriptor.Exports)
-                    {
-                        if (_providers.TryGetValue(capability, out var existing))
-                            throw new InvalidOperationException($"Duplicate provider of {capability.FullName}: {existing.Plugin.GetType().FullName} and {descriptor.Plugin.GetType().FullName}.");
                         _providers.Add(capability, descriptor);
-                    }
                     descriptor.Context = new PluginContext(this, descriptor);
                 }
                 _ordered = OrderPlugins();
@@ -130,14 +111,8 @@ namespace ObFramework.Core
                     await descriptor.Plugin.InitAsync(descriptor.Context, linked.Token);
                     descriptor.Ready = true;
                 }
-                lock (_sync)
-                {
-                    linked.Token.ThrowIfCancellationRequested();
-                    if (_stopRequested)
-                        throw new OperationCanceledException(_shutdown.Token);
-                    _state = HostState.Ready;
-                }
-                completion.TrySetResult(true);
+                linked.Token.ThrowIfCancellationRequested();
+                _state = HostState.Ready;
             }
             catch (Exception error)
             {
@@ -145,10 +120,7 @@ namespace ObFramework.Core
                 _state = HostState.Failed;
                 if (cleanupErrors.Count > 0)
                     error.Data["PluginCleanupErrors"] = new AggregateException(cleanupErrors);
-                if (error is OperationCanceledException canceled && cleanupErrors.Count == 0)
-                    completion.TrySetCanceled(canceled.CancellationToken);
-                else
-                    completion.TrySetException(error);
+                throw;
             }
         }
 
@@ -177,7 +149,7 @@ namespace ObFramework.Core
             return ordered;
         }
 
-        private async Task StopCoreAsync(TaskCompletionSource<bool> completion)
+        private async Task StopCoreAsync()
         {
             var errors = new List<Exception>();
             try
@@ -187,7 +159,10 @@ namespace ObFramework.Core
                 if (_startTask != null)
                 {
                     try { await _startTask; }
-                    catch (Exception) { }
+                    catch (Exception)
+                    {
+                        // ignored
+                    }
                 }
                 _state = HostState.Stopping;
                 errors.AddRange(await CleanupAsync());
@@ -199,9 +174,7 @@ namespace ObFramework.Core
                 _shutdown.Dispose();
             }
             if (errors.Count > 0)
-                completion.TrySetException(new AggregateException("Plugin shutdown failed.", errors));
-            else
-                completion.TrySetResult(true);
+                throw new AggregateException("Plugin shutdown failed.", errors);
         }
 
         private async Task<List<Exception>> CleanupAsync()
@@ -220,9 +193,10 @@ namespace ObFramework.Core
                     descriptor.Entered = false;
                 }
             }
-            try { _resolver?.Dispose(); }
+            var resolver = _resolver;
+            _resolver = null;
+            try { resolver?.Dispose(); }
             catch (Exception error) { errors.Add(error); }
-            finally { _resolver = null; }
             return errors;
         }
     }

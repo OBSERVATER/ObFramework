@@ -8,7 +8,6 @@ namespace ObFramework.Adapter.Godot.Core
     public abstract partial class AViewController : Node, IController
     {
         private bool _quitting;
-        public IPluginContext Plugins => GetArchitecture().Plugins;
         public abstract IArchitecture GetArchitecture();
         public override void _Ready()
         {

@@ -7,7 +7,6 @@
     {
         public bool Initialized { get; set; }
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
 
         void ICanInit.Init() => OnInit();
         void ICanInit.Deinit() => OnDeinit();

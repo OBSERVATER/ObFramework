@@ -10,7 +10,6 @@ namespace ObFramework.Core
     public abstract class AQuery<TResult> : IQuery<TResult> where TResult : class, IRuntimeData
     {
         private IArchitecture _arch;
-        public IPluginContext Plugins => (_arch ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
         protected readonly Dictionary<string, TResult> _data = new Dictionary<string, TResult>();
         private readonly IRuntimeDataGroup<TResult> _group;
         private bool _initialized;

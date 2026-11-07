@@ -2,17 +2,19 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
+using System.Linq;
 
 namespace ObFramework.Integrated.Resource
 {
     public interface IAssetManager
     {
         IHandle LoadAsset<T>(string location) where T : class;
-        Task<IHandle> LoadAssetAsync<T>(string location) where T : class;
-        Task<RawFileHandle> LoadRawFileAsync(string location);
+        Task<IHandle> LoadAssetAsync<T>(string location, CancellationToken ct = default) where T : class;
+        Task<RawFileHandle> LoadRawFileAsync(string location, CancellationToken ct = default);
     }
 
-    public class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner
+    public class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner, IDisposable
     {
         private const string AssetMethod = "Asset";
         private const string RawFileMethod = "RawFile";
@@ -20,6 +22,9 @@ namespace ObFramework.Integrated.Resource
         private readonly Dictionary<AssetKey, AssetEntry<TNativeHandle>> _handlerMap = new();
         private readonly IAssetAdapter<TNativeHandle> _adapter;
         private readonly object _gate = new object();
+        private readonly HashSet<Task> _loads = new HashSet<Task>();
+        private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
+        private bool _stopping;
 
         public AssetManager(IAssetAdapter<TNativeHandle> adapter)
         {
@@ -34,6 +39,7 @@ namespace ObFramework.Integrated.Resource
 
             lock (_gate)
             {
+                EnsureRunning();
                 if (_handlerMap.TryGetValue(key, out entry))
                 {
                     if (entry.LoadingTask != null || !entry.HasNativeHandle)
@@ -46,6 +52,7 @@ namespace ObFramework.Integrated.Resource
                 source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 entry = new AssetEntry<TNativeHandle> { Key = key, RefCount = 1, LoadingTask = source };
                 _handlerMap.Add(key, entry!);
+                _loads.Add(source.Task);
             }
 
             AssetLoadResult<T, TNativeHandle> result = default;
@@ -59,8 +66,10 @@ namespace ObFramework.Integrated.Resource
 
                 lock (_gate)
                 {
+                    EnsureRunning();
                     entry.Asset = result.Asset;
                     entry.NativeHandle = result.NativeHandle;
+                    entry.HasNativeHandle = result.HasNativeHandle;
                     entry.LoadingTask = null;
                 }
 
@@ -98,22 +107,31 @@ namespace ObFramework.Integrated.Resource
 
                 throw;
             }
+            finally
+            {
+                lock (_gate)
+                    _loads.Remove(source.Task);
+            }
         }
 
-        public async Task<IHandle> LoadAssetAsync<T>(string location) where T : class
+        public async Task<IHandle> LoadAssetAsync<T>(string location, CancellationToken ct = default) where T : class
         {
             var key = new AssetKey(location, typeof(T), AssetMethod);
-            var entry = await LoadEntryAsync(key, () => _adapter.ReadAsync<T>(key));
+            ct.ThrowIfCancellationRequested();
+            var entry = await LoadEntryAsync(key, () => _adapter.ReadAsync<T>(key, _shutdown.Token));
+            CheckCancellation(entry, ct);
             return new AssetHandle(this, entry);
         }
 
-        public async Task<RawFileHandle> LoadRawFileAsync(string location)
+        public async Task<RawFileHandle> LoadRawFileAsync(string location, CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
             if (_adapter is not IRawFileAdapter<TNativeHandle> rawAdapter)
                 throw new NotSupportedException("Current adapter does not support raw files.");
 
             var key = new AssetKey(location, typeof(byte[]), RawFileMethod);
             var entry = await LoadEntryAsync(key, () => rawAdapter.ReadRawFileAsync(location));
+            CheckCancellation(entry, ct);
             return new RawFileHandle(this, entry);
         }
 
@@ -125,6 +143,7 @@ namespace ObFramework.Integrated.Resource
 
             lock (_gate)
             {
+                EnsureRunning();
                 if (!_handlerMap.TryGetValue(key, out entry))
                 {
                     entry = new AssetEntry<TNativeHandle>
@@ -134,6 +153,7 @@ namespace ObFramework.Integrated.Resource
                     };
 
                     _handlerMap.Add(key, entry);
+                    _loads.Add(entry.LoadingTask.Task);
                     needLoad = true;
                 }
 
@@ -147,6 +167,8 @@ namespace ObFramework.Integrated.Resource
             if (loadingTask != null)
                 await loadingTask;
 
+            lock (_gate)
+                EnsureRunning();
             return entry;
         }
 
@@ -196,7 +218,72 @@ namespace ObFramework.Integrated.Resource
 
                 source.TrySetException(error);
             }
+            finally
+            {
+                lock (_gate)
+                    _loads.Remove(source.Task);
+            }
         }
+
+        private void CheckCancellation(AssetEntry<TNativeHandle> entry, CancellationToken ct)
+        {
+            if (!ct.IsCancellationRequested)
+                return;
+            ReleaseEntry(entry);
+            ct.ThrowIfCancellationRequested();
+        }
+
+        private void EnsureRunning()
+        {
+            if (_stopping)
+                throw new ObjectDisposedException(nameof(AssetManager<TNativeHandle>));
+        }
+
+        internal async Task StopAsync()
+        {
+            Task[] pending;
+            lock (_gate)
+            {
+                if (_stopping)
+                    return;
+                _stopping = true;
+                pending = _loads.ToArray();
+            }
+            var errors = new List<Exception>();
+            try { _shutdown.Cancel(); }
+            catch (Exception error) { errors.Add(error); }
+            try { await Task.WhenAll(pending); }
+            catch (Exception)
+            {
+                foreach (var task in pending)
+                    if (task.Exception != null)
+                        errors.AddRange(task.Exception.Flatten().InnerExceptions.Where(x => x is not OperationCanceledException && x is not ObjectDisposedException));
+            }
+            AssetEntry<TNativeHandle>[] entries;
+            lock (_gate)
+            {
+                entries = _handlerMap.Values.ToArray();
+                _handlerMap.Clear();
+            }
+            foreach (var entry in entries)
+            {
+                var handle = entry.NativeHandle;
+                var release = entry.HasNativeHandle;
+                entry.NativeHandle = default;
+                entry.HasNativeHandle = false;
+                entry.Asset = null!;
+                entry.RefCount = 0;
+                if (release)
+                {
+                    try { _adapter.Release(handle); }
+                    catch (Exception error) { errors.Add(error); }
+                }
+            }
+            if (errors.Count > 0)
+                throw new AggregateException("Resource shutdown failed.", errors);
+        }
+
+        public void Dispose() => _shutdown.Dispose();
 
         void IAssetEntryOwner.ReleaseEntry(AssetEntry entry)
         {

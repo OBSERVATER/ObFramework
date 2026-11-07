@@ -7,13 +7,13 @@ namespace ObFramework.Core
     }
     internal interface IModelSource
     {
+        bool Initialized { get; }
         IEnumerable<IModel> GetModelInsts();
     }
     public abstract class AModel : IModel
     {
         public bool Initialized { get; set; }
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
 
         void ICanInit.Init() => OnInit();
         void ICanInit.Deinit() => OnDeinit();

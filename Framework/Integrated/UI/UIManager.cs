@@ -18,7 +18,7 @@ namespace ObFramework.Integrated.UI
         Task<T?> Pop<T>() where T : class, IUIWindow;
     }
 
-    internal sealed class UIManager : IUIManager
+    internal sealed class UIManager : IUIManager, IDisposable
     {
         private readonly IUIAdapter _adapter;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
@@ -27,6 +27,8 @@ namespace ObFramework.Integrated.UI
         private readonly Dictionary<Type, List<int>> _idCacheMap = new();
         private readonly Stack<UIStackEntry> _stack = new();
         private int _serialId;
+        private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
+        private bool _stopping;
 
         public UIManager(IUIAdapter adapter, int cacheCapacity = 16)
         {
@@ -36,6 +38,47 @@ namespace ObFramework.Integrated.UI
 
         private int NextSerialId => checked(++_serialId);
 
+        private void EnsureRunning()
+        {
+            if (_stopping)
+                throw new ObjectDisposedException(nameof(UIManager));
+        }
+
+        internal async Task StopAsync()
+        {
+            if (_stopping)
+                return;
+            _stopping = true;
+            var errors = new List<Exception>();
+            try { _shutdown.Cancel(); }
+            catch (Exception error) { errors.Add(error); }
+            await _gate.WaitAsync();
+            try
+            {
+                var windows = _active.Values.SelectMany(x => x).ToArray();
+                _active.Clear();
+                _stack.Clear();
+                foreach (var key in windows)
+                {
+                    try { _adapter.Close(key.Instance); }
+                    catch (Exception error) { errors.Add(error); }
+                    try { _adapter.Release(key.Instance); }
+                    catch (Exception error) { errors.Add(error); }
+                }
+                while (_cache.Count > 0)
+                {
+                    try { _cache.Clear(); }
+                    catch (Exception error) { errors.Add(error); }
+                }
+                _idCacheMap.Clear();
+            }
+            finally { _gate.Release(); }
+            if (errors.Count > 0)
+                throw new AggregateException("UI shutdown failed.", errors);
+        }
+
+        public void Dispose() => _shutdown.Dispose();
+
         #region Open
 
         public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow
@@ -43,6 +86,9 @@ namespace ObFramework.Integrated.UI
 
         private async Task<IUIWindow?> OpenAsync(Type type, EUIOpenMode mode = EUIOpenMode.Single, CancellationToken cancellationToken = default, IUIData? data = null)
         {
+            EnsureRunning();
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
+            cancellationToken = linked.Token;
             await _gate.WaitAsync(cancellationToken);
             try
             {
@@ -115,16 +161,22 @@ namespace ObFramework.Integrated.UI
 
         public bool Close(IUIWindow? instance)
         {
+            EnsureRunning();
             if (instance == null)
                 return false;
 
             return TryFindActive(instance, out var key) && MoveToCache(key);
         }
 
-        public bool Close<T>() where T : class, IUIWindow => TryGetLatestActive(typeof(T), out var key) && MoveToCache(key);
+        public bool Close<T>() where T : class, IUIWindow
+        {
+            EnsureRunning();
+            return TryGetLatestActive(typeof(T), out var key) && MoveToCache(key);
+        }
 
         public int CloseAll<T>() where T : class, IUIWindow
         {
+            EnsureRunning();
             if (!_active.TryGetValue(typeof(T), out var keys))
                 return 0;
 
@@ -138,6 +190,7 @@ namespace ObFramework.Integrated.UI
 
         public bool TryGet<T>(out T? instance) where T : class, IUIWindow
         {
+            EnsureRunning();
             instance = null;
             if (!TryGetLatestActive(typeof(T), out var key))
                 return false;
@@ -306,6 +359,7 @@ namespace ObFramework.Integrated.UI
 
         public void Push<T>(T ui) where T : IUIWindow
         {
+            EnsureRunning();
             if (ui.Level != EUILevel.Common)
                 throw new InvalidOperationException("Only Common windows can be pushed onto the stack.");
 
@@ -320,6 +374,7 @@ namespace ObFramework.Integrated.UI
 
         public async Task<T?> Pop<T>() where T : class, IUIWindow
         {
+            EnsureRunning();
             if (!_stack.TryPeek(out var entry))
                 return null;
 
@@ -330,6 +385,7 @@ namespace ObFramework.Integrated.UI
             if (panel == null)
                 return null;
 
+            EnsureRunning();
             _stack.Pop();
             return (T)panel;
         }

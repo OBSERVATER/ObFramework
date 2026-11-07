@@ -7,6 +7,8 @@ namespace ObFramework.Extension
 {
     public static class ICanExtension
     {
+        public static T GetPlugin<T>(this ICanGetPlugin self) where T : class =>
+            self.GetArchitecture().GetPlugin<T>();
         public static T GetModel<T>(this ICanGetModel self) where T : class, IModel =>
             self.GetArchitecture().GetModel<T>();
         public static T GetSystem<T>(this ICanGetSystem self) where T : class, ISystem =>

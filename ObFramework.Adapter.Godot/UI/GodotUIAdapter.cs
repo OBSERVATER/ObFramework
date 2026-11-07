@@ -10,6 +10,8 @@ namespace ObFramework.Adapter.Godot.UI
     public class GodotUIAdapter : IUIAdapter
     {
         public UIRoot Root;
+        private readonly IAssetManager _assets;
+        public GodotUIAdapter(IAssetManager assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
             => await CreateAsync(typeof(T), ct) as T;
 
@@ -24,7 +26,7 @@ namespace ObFramework.Adapter.Godot.UI
             ct.ThrowIfCancellationRequested();
 
             var location = $"res://UI/{type.Name}.tscn";
-            using var handle = await ResModule.LoadAssetAsync<PackedScene>(location);
+            using var handle = await _assets.LoadAssetAsync<PackedScene>(location);
             Node? node = null;
 
             try

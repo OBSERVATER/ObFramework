@@ -20,7 +20,7 @@ namespace ObFramework.Core
         T GetSystem<T>() where T : class, ISystem;
         T GetModel<T>() where T : class, IModel;
         T GetLocalService<T>(ICanRegisterService self) where T : class, IService;
-        IPluginContext Plugins { get; }
+        T GetPlugin<T>() where T : class;
         
         IRuntimeDataGroup<TResult> SendQuery<TQuery, TResult>(bool refresh = false) where TQuery : class, IQuery<TResult>, new() where TResult : class, IRuntimeData;
         void SendCommand<T>(T command) where T : ICommand;
@@ -156,6 +156,7 @@ namespace ObFramework.Core
 
         T1 IArchitecture.GetModel<T1>() => Resolver.Resolve<T1>();
         T1 IArchitecture.GetSystem<T1>() => Resolver.Resolve<T1>();
+        public T1 GetPlugin<T1>() where T1 : class => Plugins.Get<T1>();
         IRuntimeDataGroup<TResult> IArchitecture.SendQuery<TQuery, TResult>(bool refresh = false) => Resolver.Resolve<IQueryService>().SendQuery<TQuery, TResult>(refresh);
         T1 IArchitecture.GetLocalService<T1>(ICanRegisterService self) => _lifecycleService.GetLocalService<T1>(self);
 

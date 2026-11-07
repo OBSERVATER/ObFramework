@@ -22,7 +22,6 @@ namespace ObFramework.Core
     public abstract class ACommand : ICommand
     {
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
         public abstract void Execute();
         public IArchitecture GetArchitecture() => _architecture;
         public void SetArchitecture(IArchitecture architecture) => _architecture = architecture;
@@ -30,7 +29,6 @@ namespace ObFramework.Core
     public abstract class ACommand<T> : ICommand<T>
     {
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
         public abstract T Execute();
         public IArchitecture GetArchitecture() => _architecture;
         public void SetArchitecture(IArchitecture architecture) => _architecture = architecture;
@@ -38,7 +36,6 @@ namespace ObFramework.Core
     public abstract class AAsyncCommand<T> : IAsyncCommand<T>
     {
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
         public abstract ValueTask<T> Execute(CancellationToken ct);
         public IArchitecture GetArchitecture() => _architecture;
         public void SetArchitecture(IArchitecture architecture) => _architecture = architecture;
@@ -46,7 +43,6 @@ namespace ObFramework.Core
     public abstract class AAsyncCommand : IAsyncCommand
     {
         private IArchitecture _architecture;
-        public IPluginContext Plugins => (_architecture ?? throw new System.InvalidOperationException("Architecture has not been assigned.")).Plugins;
         public abstract ValueTask Execute(CancellationToken ct);
         public IArchitecture GetArchitecture() => _architecture;
         public void SetArchitecture(IArchitecture architecture) => _architecture = architecture;

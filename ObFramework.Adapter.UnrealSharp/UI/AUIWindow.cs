@@ -6,7 +6,6 @@ namespace ObFramework.Adapter.UnrealSharp.UI;
 
 public abstract partial class AUIWindow : UUserWidget,IUIWindow
 {
-    public IPluginContext Plugins => GetArchitecture().Plugins;
     public abstract IArchitecture GetArchitecture();
     public abstract EUILevel Level { get; }
     void IUIWindow.Init(IUIData? uiData) => OnInit(uiData);
