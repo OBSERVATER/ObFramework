@@ -24,7 +24,7 @@ namespace ObFramework.Adapter.Unity.UI
             IHandle handle = null;
             try
             {
-                handle = await _assets.LoadAssetAsync<GameObject>(type.Name);
+                handle = await _assets.LoadAssetAsync<GameObject>(type.Name, ct);
                 ct.ThrowIfCancellationRequested();
                 var o = handle.Get<GameObject>();
                 inst = Object.Instantiate(o);
@@ -57,8 +57,10 @@ namespace ObFramework.Adapter.Unity.UI
 
         public void Close(IUIWindow instance)
         {
+            if (instance is not Component component || !component)
+                return;
             instance.Close();
-            var go = ((Component)instance).gameObject;
+            var go = component.gameObject;
             go.SetActive(false);
         }
         

@@ -1,109 +1,23 @@
-# ObFramework Resource — 使用与接入说明
+# Resource 使用与接入
 
-## 1. 职责与结构
-
-- **`ResModule`**：对外静态入口；一个应用运行环境只初始化一次。多个 Architecture 共用同一个资源缓存。
-- **`AssetManager`**：实例实现；管理 `AssetKey → AssetEntry`、共享异步加载、引用计数和释放。
-- **`IAssetAdapter`**：由引擎包实现普通资源加载；可选能力接口（如 `IRawFileAdapter`）由同一实例实现。
-- **`IHandle` / `AHandle`**：业务持有的资源使用权；`Dispose()` 通知管理器减引用。
-- **`ObScope`**：登记业务 Handle，Scope 结束后统一释放。
-
-## 2. 对外 API（目标）
+通过 ResourcePlugin<TNativeHandle> 启用资源能力，业务通过 `this.GetPlugin<IAssetManager>()` 访问。每个 PluginHost 只有一套资源缓存；不同 Host 彼此独立。
 
 ```csharp
-public static class ResModule
-{
-    public static void Initialize(IAssetAdapter adapter);
-    public static IHandle LoadAsset<T>(string location);
-    public static Task<IHandle> LoadAssetAsync<T>(string location);
-    public static Task<RawFileHandle> LoadRawFileAsync(string location);
-}
+var assets = this.GetPlugin<IAssetManager>();
+using var handle = await assets.LoadAssetAsync<MyAsset>("Cars/Car01", ct);
+var asset = handle.Get<MyAsset>();
+using var raw = await assets.LoadRawFileAsync("Config/Game.json", ct);
+var json = raw.Get<string>();
 ```
 
-`ResModule` 仅转发给内部 `AssetManager`，不存放第二套缓存；不直接暴露 `AssetEntry`、`ReleaseEntry` 或 Adapter。`ReleaseEntry(AssetEntry)` 保持 **internal**。
+`this.GetPlugin<T>()` 要求接收者实现 ICanGetPlugin，并归属已初始化的 Architecture。普通对象通过构造函数接收 IAssetManager，或显式传入 IPluginContext。完整启动示例见 Samples/Plugins。
 
-## 3. 启动与 Adapter 接入
+IAssetAdapter<TNativeHandle> 实现同步 Read<T>、异步 ReadAsync<T> 和 Release；可选的 IRawFileAdapter<TNativeHandle> 提供原始文件读取。AssetLoadResult<T, TNativeHandle> 包含资源对象及可选原生句柄，HasNativeHandle 决定是否调用 Adapter.Release。加载失败前尚未转交给 Manager 的句柄，由 Adapter 自行清理。引擎 API 遵守对应主线程要求。
 
-由引擎包提供实现，**GameLauncher 在创建 Architecture 前初始化一次**；不通过业务 Architecture 注册 Adapter。
+同一 Location、Type、Operation 共享一个 AssetEntry，每次加载返回独立业务 Handle。Dispose 减少引用计数，最后一个 Handle 释放原生句柄。同步加载遇到正在异步加载的资源会抛错，不阻塞等待；适配器也可以明确不支持同步加载。RawFile 的 string 使用 UTF-8 解码，byte[] 为共享数据，不应直接修改。
 
-```csharp
-// Unity 启动脚本示意；在 YooAsset/资源包初始化完成之后调用
-var adapter = new UnityAssetAdapter(/* 引擎所需依赖 */);
-ResModule.Initialize(adapter);
+同一资源的异步调用共享底层加载。调用者取消不会取消其他调用者的加载：当前实现等待底层完成后检查调用者 ct，放弃该调用者的引用并抛出取消异常，并非立即取消等待。失败会移除条目，允许重试。
 
-// 然后按项目原有入口创建/初始化 GameArchitecture
-```
+关闭时停止接收请求，通过 ObExecutionScope 请求取消并等待底层加载收尾，然后释放剩余句柄。适配器不支持取消时仍需等待其返回。业务先关闭 UI、释放自己的 Handle，再停止 Resource；PluginHost 按依赖逆序执行。ObExecutionScope 负责异步任务，不是 Handle 收集器。
 
-Godot 可在 Autoload Node 的 `_Ready()` 中装配；UnrealSharp 可在 GameInstance Subsystem 的初始化阶段装配。引擎启动顺序必须确保 Adapter 可用后再使用资源 API。
-
-Adapter 契约示意：
-
-```csharp
-public interface IAssetAdapter
-    : IReadAdapter<AssetLoadResult, AssetKey>,
-      IAsyncReadAdapter<AssetLoadResult, AssetKey>
-{
-}
-
-public interface IRawFileAdapter
-{
-    Task<AssetLoadResult> ReadRawFileAsync(string location);
-}
-
-// Unity 示例：同一个实例提供基础能力和可选能力
-public sealed class UnityAssetAdapter : IAssetAdapter, IRawFileAdapter
-{
-    // Read(AssetKey)               → AssetLoadResult
-    // ReadAsync(AssetKey)          → Task<AssetLoadResult>
-    // ReadRawFileAsync(string)     → Task<AssetLoadResult>
-}
-```
-
-`AssetLoadResult.Asset` 是加载后的资源对象，`AssetLoadResult.Handle` 是**已转换为 OBF `IHandle` 的底层持有凭证**；无需向 Manager 暴露 YooAsset/Godot/UE 原生 Handle 类型。RawFile 可返回 `byte[]`，且在不需要持续持有底层资源时 `Handle` 可为 `null`。
-
-## 4. 使用示例
-
-```csharp
-// 普通资源：同步 / 异步
-using var a = ResModule.LoadAsset<MyAsset>("Cars/Car01");
-MyAsset asset = a.Get<MyAsset>();
-
-using var b = await ResModule.LoadAssetAsync<MyAsset>("Cars/Car01");
-
-// 原始文件：仅异步
-using var raw = await ResModule.LoadRawFileAsync("Config/Game.json");
-string json = raw.Get<string>();    // UTF-8
-byte[] bytes = raw.Get<byte[]>();  // 共享字节数组，请勿修改
-
-// 业务可把 IHandle 登记到 ObScope，结束时自动 Dispose
-// scope.Register(b); // 按当前 ObScope 实际登记 API 替换
-```
-
-每次加载返回**独立的业务 Handle**；同一缓存键复用 `AssetEntry`。每个 Handle 只释放一次；`RefCount == 0` 时立刻移除缓存并 `Dispose()` Adapter 返回的底层 `IHandle`。这里的“释放”不等于引擎立即回收实际内存。
-
-## 5. 加载方式扩展
-
-普通资源、RawFile 等共享型操作复用 `LoadEntryAsync()` 和 `CompleteLoadAsync()`；通过加载委托执行不同 Adapter 方法：
-
-```csharp
-var entry = await LoadEntryAsync(key, () => _adapter.ReadAsync(key));
-
-// RawFile（仅检测同一个 _adapter 实例是否支持能力）
-if (_adapter is not IRawFileAdapter rawAdapter)
-    throw new NotSupportedException("RawFile is unsupported.");
-var rawEntry = await LoadEntryAsync(rawKey,
-    () => rawAdapter.ReadRawFileAsync(location));
-```
-
-`AssetKey` 的身份建议包含 **Location + Type + Operation**（稳定操作标识），避免同一路径在 Asset/RawFile/SubAssets 等方式下误共享。无需按 `typeof(T)` 猜测加载方法，也无需 Attribute 或工厂。
-
-**Scene（待设计）**：未来可由 `ResModule.LoadSceneAsync()` 统一进入底层加载；`SceneManager` 负责切换、激活和卸载流程。运行中的场景实例默认**不使用普通资源的共享 Entry**；场景选项与 `ISceneHandle` 尚未定稿。
-
-## 6. 当前约束
-
-- 异步 API 使用标准 `Task`；**不支持调用者取消加载**。
-- 同一资源的并发异步请求共享一次加载任务；同步调用遇到尚未完成的异步加载时抛出异常，不阻塞等待。
-- `AssetManager` 的字典与引用计数需要一致的同步保护；实际引擎加载/释放遵守对应引擎线程规则。
-- 加载失败从缓存移除，异常传递给所有等待者；后续允许重试。
-- `ResModule.Initialize()` 约定启动阶段单线程、只调用一次；不允许运行时替换仍被使用的 Adapter。
-- 关闭顺序：先释放业务 `ObScope`/Handle，再关闭资源系统。静态模块的 `Shutdown` 和未完成加载时的退出协议**尚未实现**。
+ResourcePlugin 借用传入的 Adapter，不负责 Dispose 外部 Adapter；由创建它的应用在插件停止后释放。业务不得释放 Manager。旧静态入口已删除，不提供全局默认实例。

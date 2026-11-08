@@ -26,7 +26,7 @@ namespace ObFramework.Adapter.Godot.UI
             ct.ThrowIfCancellationRequested();
 
             var location = $"res://UI/{type.Name}.tscn";
-            using var handle = await _assets.LoadAssetAsync<PackedScene>(location);
+            using var handle = await _assets.LoadAssetAsync<PackedScene>(location, ct);
             Node? node = null;
 
             try
@@ -74,8 +74,11 @@ namespace ObFramework.Adapter.Godot.UI
 
         public void Close(IUIWindow instance)
         {
+            var control = (Control)instance;
+            if (!GodotObject.IsInstanceValid(control) || control.IsQueuedForDeletion())
+                return;
             instance.Close();
-            ((Control)instance).Hide();
+            control.Hide();
         }
 
         public void Release(IUIWindow instance)

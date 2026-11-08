@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Linq;
+using ObFramework.Core.Async;
 
 namespace ObFramework.Integrated.Resource
 {
@@ -14,7 +15,7 @@ namespace ObFramework.Integrated.Resource
         Task<RawFileHandle> LoadRawFileAsync(string location, CancellationToken ct = default);
     }
 
-    public class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner, IDisposable
+    public class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner
     {
         private const string AssetMethod = "Asset";
         private const string RawFileMethod = "RawFile";
@@ -22,8 +23,7 @@ namespace ObFramework.Integrated.Resource
         private readonly Dictionary<AssetKey, AssetEntry<TNativeHandle>> _handlerMap = new();
         private readonly IAssetAdapter<TNativeHandle> _adapter;
         private readonly object _gate = new object();
-        private readonly HashSet<Task> _loads = new HashSet<Task>();
-        private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
+        private readonly ObExecutionScope _loads = new ObExecutionScope();
         private bool _stopping;
 
         public AssetManager(IAssetAdapter<TNativeHandle> adapter)
@@ -33,84 +33,35 @@ namespace ObFramework.Integrated.Resource
 
         public IHandle LoadAsset<T>(string location) where T : class
         {
-            var key = new AssetKey(location, typeof(T));
-            AssetEntry<TNativeHandle> entry;
-            TaskCompletionSource<bool> source;
-
             lock (_gate)
             {
+                var key = new AssetKey(location, typeof(T));
                 EnsureRunning();
-                if (_handlerMap.TryGetValue(key, out entry))
+                if (_handlerMap.TryGetValue(key, out var entry))
                 {
-                    if (entry.LoadingTask != null || !entry.HasNativeHandle)
+                    if (entry.LoadingTask != null)
                         throw new InvalidOperationException($"Asset is loading asynchronously: {location}");
-
                     entry.RefCount++;
                     return new AssetHandle(this, entry);
                 }
 
-                source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                entry = new AssetEntry<TNativeHandle> { Key = key, RefCount = 1, LoadingTask = source };
-                _handlerMap.Add(key, entry!);
-                _loads.Add(source.Task);
-            }
-
-            AssetLoadResult<T, TNativeHandle> result = default;
-
-            try
-            {
-                result = _adapter.Read<T>(key);
-
-                if (result.Asset == null || !result.HasNativeHandle)
-                    throw new InvalidOperationException($"Failed to load asset: {location}");
-
-                lock (_gate)
+                var result = _adapter.Read<T>(key);
+                if (result.Asset == null)
                 {
-                    EnsureRunning();
-                    entry.Asset = result.Asset;
-                    entry.NativeHandle = result.NativeHandle;
-                    entry.HasNativeHandle = result.HasNativeHandle;
-                    entry.LoadingTask = null;
-                }
-
-                source.TrySetResult(true);
-                return new AssetHandle(this, entry);
-            }
-            catch (Exception ex)
-            {
-                lock (_gate)
-                {
-                    _handlerMap.Remove(key);
-                    entry.LoadingTask = null;
-                    entry.RefCount = 0;
-                }
-
-                Exception error = ex;
-
-                if (result.HasNativeHandle)
-                {
-                    try
-                    {
+                    if (result.HasNativeHandle)
                         _adapter.Release(result.NativeHandle);
-                    }
-                    catch (Exception releaseError)
-                    {
-                        error = new AggregateException(ex, releaseError);
-                    }
+                    throw new InvalidOperationException($"Failed to load asset: {location}");
                 }
-
-                source.TrySetException(error);
-                _ = source.Task.Exception;
-
-                if (!ReferenceEquals(error, ex))
-                    throw error;
-
-                throw;
-            }
-            finally
-            {
-                lock (_gate)
-                    _loads.Remove(source.Task);
+                entry = new AssetEntry<TNativeHandle>
+                {
+                    Key = key,
+                    Asset = result.Asset,
+                    NativeHandle = result.NativeHandle,
+                    HasNativeHandle = result.HasNativeHandle,
+                    RefCount = 1
+                };
+                _handlerMap.Add(key, entry);
+                return new AssetHandle(this, entry);
             }
         }
 
@@ -118,7 +69,7 @@ namespace ObFramework.Integrated.Resource
         {
             var key = new AssetKey(location, typeof(T), AssetMethod);
             ct.ThrowIfCancellationRequested();
-            var entry = await LoadEntryAsync(key, () => _adapter.ReadAsync<T>(key, _shutdown.Token));
+            var entry = await LoadEntryAsync(key, token => _adapter.ReadAsync<T>(key, token));
             CheckCancellation(entry, ct);
             return new AssetHandle(this, entry);
         }
@@ -130,12 +81,12 @@ namespace ObFramework.Integrated.Resource
                 throw new NotSupportedException("Current adapter does not support raw files.");
 
             var key = new AssetKey(location, typeof(byte[]), RawFileMethod);
-            var entry = await LoadEntryAsync(key, () => rawAdapter.ReadRawFileAsync(location));
+            var entry = await LoadEntryAsync(key, _ => rawAdapter.ReadRawFileAsync(location));
             CheckCancellation(entry, ct);
             return new RawFileHandle(this, entry);
         }
 
-        private async Task<AssetEntry<TNativeHandle>> LoadEntryAsync<T>(AssetKey key, Func<Task<AssetLoadResult<T, TNativeHandle>>> loader) where T : class
+        private async Task<AssetEntry<TNativeHandle>> LoadEntryAsync<T>(AssetKey key, Func<CancellationToken, Task<AssetLoadResult<T, TNativeHandle>>> loader) where T : class
         {
             AssetEntry<TNativeHandle> entry;
             Task loadingTask;
@@ -153,16 +104,14 @@ namespace ObFramework.Integrated.Resource
                     };
 
                     _handlerMap.Add(key, entry);
-                    _loads.Add(entry.LoadingTask.Task);
                     needLoad = true;
                 }
 
                 entry.RefCount++;
                 loadingTask = entry.LoadingTask?.Task;
+                if (needLoad)
+                    _ = _loads.Run(token => CompleteLoadAsync(entry, loader, token));
             }
-
-            if (needLoad)
-                _ = CompleteLoadAsync(entry, loader);
 
             if (loadingTask != null)
                 await loadingTask;
@@ -172,14 +121,14 @@ namespace ObFramework.Integrated.Resource
             return entry;
         }
 
-        private async Task CompleteLoadAsync<T>(AssetEntry<TNativeHandle> entry, Func<Task<AssetLoadResult<T, TNativeHandle>>> loader) where T : class
+        private async Task CompleteLoadAsync<T>(AssetEntry<TNativeHandle> entry, Func<CancellationToken, Task<AssetLoadResult<T, TNativeHandle>>> loader, CancellationToken ct) where T : class
         {
             var source = entry.LoadingTask;
             AssetLoadResult<T, TNativeHandle> result = default;
 
             try
             {
-                result = await loader();
+                result = await loader(ct);
                 if (result.Asset == null)
                     throw new InvalidOperationException($"Failed to load resource: {entry.Key.Location}");
 
@@ -218,11 +167,6 @@ namespace ObFramework.Integrated.Resource
 
                 source.TrySetException(error);
             }
-            finally
-            {
-                lock (_gate)
-                    _loads.Remove(source.Task);
-            }
         }
 
         private void CheckCancellation(AssetEntry<TNativeHandle> entry, CancellationToken ct)
@@ -241,24 +185,15 @@ namespace ObFramework.Integrated.Resource
 
         internal async Task StopAsync()
         {
-            Task[] pending;
             lock (_gate)
             {
                 if (_stopping)
                     return;
                 _stopping = true;
-                pending = _loads.ToArray();
             }
             var errors = new List<Exception>();
-            try { _shutdown.Cancel(); }
+            try { await _loads.StopAsync(); }
             catch (Exception error) { errors.Add(error); }
-            try { await Task.WhenAll(pending); }
-            catch (Exception)
-            {
-                foreach (var task in pending)
-                    if (task.Exception != null)
-                        errors.AddRange(task.Exception.Flatten().InnerExceptions.Where(x => x is not OperationCanceledException && x is not ObjectDisposedException));
-            }
             AssetEntry<TNativeHandle>[] entries;
             lock (_gate)
             {
@@ -282,8 +217,6 @@ namespace ObFramework.Integrated.Resource
             if (errors.Count > 0)
                 throw new AggregateException("Resource shutdown failed.", errors);
         }
-
-        public void Dispose() => _shutdown.Dispose();
 
         void IAssetEntryOwner.ReleaseEntry(AssetEntry entry)
         {

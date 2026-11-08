@@ -165,6 +165,8 @@ public class UnrealUIAdapter : IUIAdapter
     public void Close(IUIWindow instance)
     {
         var ui = (UUserWidget)instance;
+        if (ui.IsDestroyed)
+            return;
 
         try
         {

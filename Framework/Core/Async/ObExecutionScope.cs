@@ -63,6 +63,7 @@ namespace ObFramework.Core.Async
                 }
 
                 await completion;
+                _cts.Dispose();
 
                 lock (_gate)
                 {

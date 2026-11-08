@@ -1,13 +1,22 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Godot;
+using ObFramework.Core;
 
 namespace ObFramework.Adapter.Godot.Core
 {
     public abstract partial class AGameLauncher : AViewController
     {
+        private PluginApplication _application = null!;
+        private bool _quitting;
+        protected abstract PluginApplication CreateApplication();
+        public override IArchitecture GetArchitecture() => _application.Architecture;
+        public Task StopAsync() => _application?.StopAsync() ?? Task.CompletedTask;
+
         public override void _Ready()
         {
+            base._Ready();
+            GetTree().AutoAcceptQuit = false;
             _ = RunLaunchAsync();
         }
 
@@ -15,24 +24,40 @@ namespace ObFramework.Adapter.Godot.Core
         {
             try
             {
-                await LaunchAsync();
+                _application = CreateApplication();
+                await _application.StartAsync();
             }
-            catch (Exception e)
-            {
-                GD.PushError(e.ToString());
-            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { GD.PushError(error.ToString()); }
         }
 
-        protected virtual async Task LaunchAsync()
+        public override void _ExitTree()
         {
-            await InitResourcesAsync();
-            await InitConfigAsync();
-            await InitGameSystemsAsync();
-            await EnterGameAsync();
+            _ = StopAndObserveAsync();
+            base._ExitTree();
         }
-        protected abstract Task InitResourcesAsync();
-        protected abstract Task InitConfigAsync();
-        protected abstract Task InitGameSystemsAsync();
-        protected abstract Task EnterGameAsync();
+
+        public override void _Notification(int what)
+        {
+            base._Notification(what);
+            if (what != NotificationWMCloseRequest || _quitting)
+                return;
+            _quitting = true;
+            _ = QuitAsync();
+        }
+
+        private async Task QuitAsync()
+        {
+            var tree = GetTree();
+            await StopAndObserveAsync();
+            if (GodotObject.IsInstanceValid(tree))
+                tree.Quit();
+        }
+
+        private async Task StopAndObserveAsync()
+        {
+            try { await StopAsync(); }
+            catch (Exception error) { GD.PushError(error.ToString()); }
+        }
     }
 }
