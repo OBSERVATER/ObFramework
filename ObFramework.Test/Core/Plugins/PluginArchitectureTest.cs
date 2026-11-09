@@ -36,43 +36,43 @@ public class PluginArchitectureTest
             RegisterPubService<IConsumerService, ConsumerService>();
         }
         public IPluginContext PublicServiceContext => Resolver.Resolve<IConsumerService>().Plugins;
-        public ICounter ResolveCounter() => Resolver.Resolve<ICounter>();
+        public CounterPlugin ResolveCounter() => Resolver.Resolve<CounterPlugin>();
     }
     public sealed class SecondArchitecture : AArchitecture<SecondArchitecture>
     {
         protected override void Init() { }
     }
-    public sealed class CounterCommand : ACommand<ICounter>
+    public sealed class CounterCommand : ACommand<CounterPlugin>
     {
-        public override ICounter Execute() => this.GetPlugin<ICounter>();
+        public override CounterPlugin Execute() => this.GetPlugin<CounterPlugin>();
     }
     public sealed class CounterData : IRuntimeData
     {
         public string Id => "counter";
-        public ICounter Counter { get; }
-        public CounterData(ICounter counter) => Counter = counter;
+        public CounterPlugin Counter { get; }
+        public CounterData(CounterPlugin counter) => Counter = counter;
     }
     public sealed class CounterQuery : AQuery<CounterData>
     {
-        protected override void OnRefresh() => _data["counter"] = new CounterData(this.GetPlugin<ICounter>());
+        protected override void OnRefresh() => _data["counter"] = new CounterData(this.GetPlugin<CounterPlugin>());
     }
     [Test]
-    public async Task ArchitecturesAndBusinessObjectsBorrowTheSameGameCapabilities()
+    public async Task ArchitecturesAndBusinessObjectsShareTheSamePluginInstance()
     {
         var host = new PluginHost(new CounterPlugin(new List<string>()));
         await host.StartAsync();
         FirstArchitecture.InitInterface(host.Context);
         SecondArchitecture.InitInterface(host.Context);
-        var first = (FirstArchitecture)FirstArchitecture.Arch;
-        var second = SecondArchitecture.Arch;
-        var counter = host.Context.Get<ICounter>();
+        var first = (FirstArchitecture)FirstArchitecture.Interface;
+        var second = SecondArchitecture.Interface;
+        var counter = host.Context.Get<CounterPlugin>();
         try
         {
             Assert.That(first.Plugins, Is.SameAs(host.Context));
-            Assert.That(((IArchitecture)first).GetPlugin<ICounter>(), Is.SameAs(counter));
+            Assert.That(((IArchitecture)first).GetPlugin<CounterPlugin>(), Is.SameAs(counter));
             var system = (ConsumerSystem)((IArchitecture)first).GetSystem<IConsumerSystem>();
-            Assert.That(system.GetPlugin<ICounter>(), Is.SameAs(counter));
-            Assert.That(((ICanGetPlugin)system).GetPlugin<ICounter>(), Is.SameAs(counter));
+            Assert.That(system.GetPlugin<CounterPlugin>(), Is.SameAs(counter));
+            Assert.That(system.GetPlugin<CounterPlugin>(), Is.SameAs(counter));
             Assert.That(system.ServiceContext, Is.SameAs(host.Context));
             Assert.That(first.PublicServiceContext, Is.SameAs(host.Context));
             Assert.Throws<VContainerException>(() => first.ResolveCounter());
@@ -81,8 +81,8 @@ public class PluginArchitectureTest
             Assert.That(query.TryGet("counter", out var data), Is.True);
             Assert.That(data!.Counter, Is.SameAs(counter));
             first.Deinit();
-            Assert.That(second.GetPlugin<ICounter>(), Is.SameAs(counter));
-            Assert.That(counter.Disposals, Is.Zero);
+            Assert.That(second.GetPlugin<CounterPlugin>(), Is.SameAs(counter));
+            Assert.That(counter.Stops, Is.Zero);
         }
         finally
         {
@@ -90,17 +90,17 @@ public class PluginArchitectureTest
             second.Deinit();
             await host.StopAsync();
         }
-        Assert.That(counter.Disposals, Is.EqualTo(1));
+        Assert.That(counter.Stops, Is.EqualTo(1));
     }
 
     [Test]
     public void CoreCanRunWithoutPlugins()
     {
         SecondArchitecture.InitInterface();
-        var architecture = SecondArchitecture.Arch;
+        var architecture = SecondArchitecture.Interface;
         try
         {
-            Assert.Throws<InvalidOperationException>(() => architecture.GetPlugin<ICounter>());
+            Assert.Throws<InvalidOperationException>(() => architecture.GetPlugin<CounterPlugin>());
         }
         finally { architecture.Deinit(); }
     }

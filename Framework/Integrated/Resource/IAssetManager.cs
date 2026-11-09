@@ -8,14 +8,15 @@ using ObFramework.Core.Async;
 
 namespace ObFramework.Integrated.Resource
 {
-    public interface IAssetManager
+    internal interface IAssetManager
     {
         IHandle LoadAsset<T>(string location) where T : class;
         Task<IHandle> LoadAssetAsync<T>(string location, CancellationToken ct = default) where T : class;
         Task<RawFileHandle> LoadRawFileAsync(string location, CancellationToken ct = default);
+        Task StopAsync();
     }
 
-    public class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner
+    internal sealed class AssetManager<TNativeHandle> : IAssetManager, IAssetEntryOwner
     {
         private const string AssetMethod = "Asset";
         private const string RawFileMethod = "RawFile";
@@ -183,7 +184,7 @@ namespace ObFramework.Integrated.Resource
                 throw new ObjectDisposedException(nameof(AssetManager<TNativeHandle>));
         }
 
-        internal async Task StopAsync()
+        public async Task StopAsync()
         {
             lock (_gate)
             {

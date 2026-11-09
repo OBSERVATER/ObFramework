@@ -35,19 +35,19 @@ public class PluginCompositionTest
             }),
             new SavePlugin(Store),
             new DiagnosticsPlugin(new DiagnosticsOption(_directory), Sink),
-            new ResourcePlugin<int>(Assets)
+            ResourcePlugin.Create(Assets)
         };
         protected override IArchitecture CreateArchitecture(IPluginContext plugins)
         {
             SaveTests.Architecture.InitInterface(plugins);
-            return SaveTests.Architecture.Arch;
+            return SaveTests.Architecture.Interface;
         }
         protected override Task EnterGameAsync(CancellationToken ct)
         {
-            Architecture.GetPlugin<ISaveBinding>().Bind(Architecture);
+            Architecture.GetPlugin<SavePlugin>().Bind(Architecture);
             return Task.CompletedTask;
         }
-        protected override Task StopGameAsync() => Architecture.GetPlugin<ISaveBinding>().UnbindAsync();
+        protected override Task StopGameAsync() => Architecture.GetPlugin<SavePlugin>().UnbindAsync();
         protected override void ReleaseAdapters()
         {
             Assets.Dispose();
@@ -65,18 +65,18 @@ public class PluginCompositionTest
         {
             await application.StartAsync();
             var architecture = application.Architecture;
-            Assert.That(architecture.GetPlugin<IConfigManager>().Get<ResourceTests.Row>(7)!.Name, Is.EqualTo("seven"));
+            Assert.That(architecture.GetPlugin<ConfigPlugin>().Get<ResourceTests.Row>(7)!.Name, Is.EqualTo("seven"));
             var model = architecture.GetModel<SaveTests.IPlayerModel>();
-            var save = architecture.GetPlugin<ISaveManager>();
+            var save = architecture.GetPlugin<SavePlugin>();
             model.Value = 42;
             await save.SaveAsync("slot");
             model.Value = 0;
             await save.LoadAsync("slot");
             Assert.That(model.Value, Is.EqualTo(42));
-            var ui = architecture.GetPlugin<IUIManager>();
+            var ui = architecture.GetPlugin<UIPlugin>();
             var window = await ui.OpenAsync<UIPluginTest.Window>();
             ui.Close(window!);
-            architecture.GetPlugin<IDiagnosticsManager>().GetLogger("Composition").Warning("composition-complete");
+            architecture.GetPlugin<DiagnosticsPlugin>().GetLogger("Composition").Warning("composition-complete");
             await application.StopAsync();
             Assert.That(application.ResourcesAvailableDuringUIStop, Is.True);
             Assert.That(application.UI.Released, Is.EqualTo(1));

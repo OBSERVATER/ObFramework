@@ -10,11 +10,12 @@ namespace ObFramework.Integrated.UI
     public sealed class UIPlugin : IPlugin
     {
         private IUIAdapter? _adapter;
-        private readonly Func<IAssetManager, IUIAdapter>? _createAdapter;
+        private readonly Func<ResourcePlugin, IUIAdapter>? _createAdapter;
         private readonly Func<IUIAdapter, CancellationToken, Task>? _initialize;
         private readonly Func<IUIAdapter, Task>? _shutdown;
         private readonly int _cacheCapacity;
         private UIManager? _manager;
+        private UIManager Manager => _manager ?? throw new ObjectDisposedException(nameof(UIPlugin), "UI plugin is not running.");
         public UIPlugin(IUIAdapter adapter, int cacheCapacity = 10, Func<IUIAdapter, CancellationToken, Task>? initialize = null, Func<IUIAdapter, Task>? shutdown = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
@@ -22,30 +23,39 @@ namespace ObFramework.Integrated.UI
             _initialize = initialize;
             _shutdown = shutdown;
         }
-        public UIPlugin(Func<IAssetManager, IUIAdapter> createAdapter, int cacheCapacity = 10, Func<IUIAdapter, CancellationToken, Task>? initialize = null, Func<IUIAdapter, Task>? shutdown = null)
+        public UIPlugin(Func<ResourcePlugin, IUIAdapter> createAdapter, int cacheCapacity = 10, Func<IUIAdapter, CancellationToken, Task>? initialize = null, Func<IUIAdapter, Task>? shutdown = null)
         {
             _createAdapter = createAdapter ?? throw new ArgumentNullException(nameof(createAdapter));
             _cacheCapacity = cacheCapacity;
             _initialize = initialize;
             _shutdown = shutdown;
         }
-        public void Register(PluginRegistration registration)
+
+        public Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow
+            => Manager.OpenAsync<T>(mode, data, cancellationToken);
+        public bool TryGet<T>(out T? instance) where T : class, IUIWindow => Manager.TryGet(out instance);
+        public bool Close(IUIWindow? instance) => Manager.Close(instance);
+        public bool Close<T>() where T : class, IUIWindow => Manager.Close<T>();
+        public int CloseAll<T>() where T : class, IUIWindow => Manager.CloseAll<T>();
+        public void Push<T>(T ui) where T : IUIWindow => Manager.Push(ui);
+        public Task<T?> Pop<T>() where T : class, IUIWindow => Manager.Pop<T>();
+
+        void IPlugin.Register(PluginRegistration registration)
         {
             if (_createAdapter != null)
-                registration.Require<IAssetManager>();
-            registration.Export<IUIManager, UIManager>(_ => new UIManager(_adapter ?? throw new InvalidOperationException("UI adapter is not ready."), _cacheCapacity));
+                registration.Require<ResourcePlugin>();
         }
-        public async Task InitAsync(IPluginContext plugins, CancellationToken ct)
+        async Task IPlugin.InitAsync(IPluginContext plugins, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             if (_createAdapter != null)
-                _adapter = _createAdapter(plugins.Get<IAssetManager>()) ?? throw new InvalidOperationException("UI adapter factory returned null.");
-            _manager = (UIManager)plugins.Get<IUIManager>();
+                _adapter = _createAdapter(plugins.Get<ResourcePlugin>()) ?? throw new InvalidOperationException("UI adapter factory returned null.");
+            _manager = new UIManager(_adapter!, _cacheCapacity);
             if (_initialize != null)
                 await _initialize(_adapter!, ct);
             ct.ThrowIfCancellationRequested();
         }
-        public async Task StopAsync(IPluginContext plugins)
+        async Task IPlugin.StopAsync(IPluginContext plugins)
         {
             var errors = new List<Exception>();
             if (_manager != null)
@@ -66,6 +76,7 @@ namespace ObFramework.Integrated.UI
                     catch (Exception error) { errors.Add(error); }
                 }
             }
+            _manager?.Dispose();
             _manager = null;
             _adapter = null;
             if (errors.Count > 0)

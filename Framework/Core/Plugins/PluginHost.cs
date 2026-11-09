@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using VContainer;
 
 namespace ObFramework.Core
 {
@@ -10,10 +9,9 @@ namespace ObFramework.Core
     {
         private enum HostState { Created, Starting, Ready, Stopping, Closed, Failed }
         private readonly List<PluginDescriptor> _plugins = new List<PluginDescriptor>();
-        private readonly Dictionary<Type, PluginDescriptor> _providers = new Dictionary<Type, PluginDescriptor>();
+        private readonly Dictionary<Type, PluginDescriptor> _byType = new Dictionary<Type, PluginDescriptor>();
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private List<PluginDescriptor> _ordered = new List<PluginDescriptor>();
-        private IObjectResolver? _resolver;
         private HostState _state;
         private bool _stopRequested;
         private Task? _startTask;
@@ -59,14 +57,14 @@ namespace ObFramework.Core
                 if (_owner != null || _host._state != HostState.Ready || _host._stopRequested)
                     throw new InvalidOperationException("Plugin context is not ready or has been closed.");
             }
-            public T Get<T>() where T : class
+            public T Get<T>() where T : class, IPlugin
             {
                 if (_owner == null)
                     EnsureReady();
-                else if (!_owner.Entered || _host._resolver == null)
+                else if (!_owner.Entered)
                     throw new InvalidOperationException("Plugin lifecycle context is not active.");
-                if (!_host._providers.TryGetValue(typeof(T), out var provider))
-                    throw new InvalidOperationException($"Capability {typeof(T).FullName} is not exported.");
+                if (!_host._byType.TryGetValue(typeof(T), out var provider))
+                    throw new InvalidOperationException($"Plugin {typeof(T).FullName} is not enabled.");
                 if (_owner != null && provider != _owner)
                 {
                     if (!_owner.Dependencies.Contains(typeof(T)))
@@ -74,7 +72,7 @@ namespace ObFramework.Core
                     if (!provider.Ready)
                         throw new InvalidOperationException($"Dependency {typeof(T).FullName} is not ready.");
                 }
-                return _host._resolver!.Resolve<T>();
+                return (T)provider.Plugin;
             }
         }
 
@@ -84,26 +82,20 @@ namespace ObFramework.Core
             try
             {
                 linked.Token.ThrowIfCancellationRequested();
-                var builder = new ContainerBuilder();
-                var bindings = new Dictionary<Type, PluginDescriptor>();
-                var types = new HashSet<Type>();
                 foreach (var descriptor in _plugins)
                 {
-                    if (!types.Add(descriptor.Plugin.GetType()))
+                    if (!_byType.TryAdd(descriptor.Plugin.GetType(), descriptor))
                         throw new InvalidOperationException($"Duplicate plugin {descriptor.Plugin.GetType().FullName}.");
                 }
                 foreach (var descriptor in _plugins)
                 {
-                    var registration = new PluginRegistration(builder, descriptor, bindings);
+                    var registration = new PluginRegistration(descriptor.Dependencies);
                     try { descriptor.Plugin.Register(registration); }
                     finally { registration.Freeze(); }
-                    foreach (var capability in descriptor.Exports)
-                        _providers.Add(capability, descriptor);
                     descriptor.Context = new PluginContext(this, descriptor);
                 }
                 _ordered = OrderPlugins();
                 linked.Token.ThrowIfCancellationRequested();
-                _resolver = builder.Build();
                 foreach (var descriptor in _ordered)
                 {
                     linked.Token.ThrowIfCancellationRequested();
@@ -128,8 +120,8 @@ namespace ObFramework.Core
         {
             foreach (var descriptor in _plugins)
                 foreach (var dependency in descriptor.Dependencies)
-                    if (!_providers.ContainsKey(dependency))
-                        throw new InvalidOperationException($"Plugin {descriptor.Plugin.GetType().FullName} requires missing capability {dependency.FullName}.");
+                    if (!_byType.ContainsKey(dependency))
+                        throw new InvalidOperationException($"Plugin {descriptor.Plugin.GetType().FullName} requires missing plugin {dependency.FullName}.");
             var ordered = new List<PluginDescriptor>();
             var remaining = new List<PluginDescriptor>(_plugins);
             while (remaining.Count > 0)
@@ -137,7 +129,7 @@ namespace ObFramework.Core
                 var index = remaining.FindIndex(plugin =>
                 {
                     foreach (var dependency in plugin.Dependencies)
-                        if (!ordered.Contains(_providers[dependency]))
+                        if (!ordered.Contains(_byType[dependency]))
                             return false;
                     return true;
                 });
@@ -193,10 +185,6 @@ namespace ObFramework.Core
                     descriptor.Entered = false;
                 }
             }
-            var resolver = _resolver;
-            _resolver = null;
-            try { resolver?.Dispose(); }
-            catch (Exception error) { errors.Add(error); }
             return errors;
         }
     }

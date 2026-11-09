@@ -6,11 +6,9 @@ namespace ObFramework.Test.Core.Plugins;
 [TestFixture]
 public class PluginLifecycleTest
 {
-    public interface IFirst { }
-    public interface ISecond { }
-    public interface IThird { }
-    public sealed class First : IFirst { }
-    public sealed class Second : ISecond { }
+    private sealed class First { }
+    private sealed class Second { }
+    private sealed class Third { }
 
     public sealed class Plugin<T> : IPlugin
     {
@@ -24,26 +22,23 @@ public class PluginLifecycleTest
 
     [TestCase("missing")]
     [TestCase("duplicate plugin")]
-    [TestCase("duplicate provider")]
     [TestCase("cycle")]
     public async Task RejectsInvalidGraphBeforeAnyInitialization(string problem)
     {
         var initialized = false;
-        var first = new Plugin<IFirst>
+        var first = new Plugin<First>
         {
-            Configure = r => r.Export<IFirst, First>(),
             Initialize = (_, _) => { initialized = true; return Task.CompletedTask; }
         };
-        var second = new Plugin<ISecond>();
+        var second = new Plugin<Second>();
         IPlugin[] plugins = { first, second };
         switch (problem)
         {
-            case "missing": second.Configure = r => r.Require<IThird>(); break;
+            case "missing": second.Configure = r => r.Require<Plugin<Third>>(); break;
             case "duplicate plugin": plugins = new IPlugin[] { first, first }; break;
-            case "duplicate provider": second.Configure = r => r.Export<IFirst, First>(); break;
             case "cycle":
-                first.Configure = r => { r.Export<IFirst, First>(); r.Require<ISecond>(); };
-                second.Configure = r => { r.Export<ISecond, Second>(); r.Require<IFirst>(); };
+                first.Configure = r => r.Require<Plugin<Second>>();
+                second.Configure = r => r.Require<Plugin<First>>();
                 break;
         }
         var host = new PluginHost(plugins);
@@ -53,31 +48,30 @@ public class PluginLifecycleTest
     }
 
     [Test]
-    public async Task BusinessContextWaitsForWholeHostAndOnlyExportsAreVisible()
+    public async Task BusinessContextWaitsForWholeHostAndOnlyEnabledPluginsAreVisible()
     {
         var entered = new TaskCompletionSource<bool>();
         var release = new TaskCompletionSource<bool>();
-        var host = new PluginHost(new Plugin<IFirst>
+        var plugin = new Plugin<First>
         {
-            Configure = r => { r.Export<IFirst, First>(); r.Register<Second>(); },
             Initialize = async (plugins, _) =>
             {
-                Assert.That(plugins.Get<IFirst>(), Is.TypeOf<First>());
                 entered.SetResult(true);
                 await release.Task;
             }
-        });
+        };
+        var host = new PluginHost(plugin);
         var context = host.Context;
-        Assert.Throws<InvalidOperationException>(() => context.Get<IFirst>());
+        Assert.Throws<InvalidOperationException>(() => context.Get<Plugin<First>>());
         var start = host.StartAsync();
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Throws<InvalidOperationException>(() => context.Get<IFirst>());
+        Assert.Throws<InvalidOperationException>(() => context.Get<Plugin<First>>());
         release.SetResult(true);
         await start;
-        Assert.That(context.Get<IFirst>(), Is.TypeOf<First>());
-        Assert.Throws<InvalidOperationException>(() => context.Get<Second>());
+        Assert.That(context.Get<Plugin<First>>(), Is.SameAs(plugin));
+        Assert.Throws<InvalidOperationException>(() => context.Get<Plugin<Second>>());
         await host.StopAsync();
-        Assert.Throws<InvalidOperationException>(() => context.Get<IFirst>());
+        Assert.Throws<InvalidOperationException>(() => context.Get<Plugin<First>>());
     }
 
     [Test]
@@ -85,14 +79,14 @@ public class PluginLifecycleTest
     {
         var events = new List<string>();
         var original = new InvalidOperationException("init failed");
-        ICounter? counter = null;
-        var host = new PluginHost(new CounterPlugin(events), new Plugin<IFirst>
+        CounterPlugin? counter = null;
+        var host = new PluginHost(new CounterPlugin(events), new Plugin<First>
         {
-            Configure = r => r.Require<ICounter>(),
-            Initialize = (plugins, _) => { counter = plugins.Get<ICounter>(); events.Add("partial:init"); throw original; },
+            Configure = r => r.Require<CounterPlugin>(),
+            Initialize = (plugins, _) => { counter = plugins.Get<CounterPlugin>(); events.Add("partial:init"); throw original; },
             Stop = plugins =>
             {
-                Assert.That(plugins.Get<ICounter>().Disposals, Is.Zero);
+                Assert.That(plugins.Get<CounterPlugin>().Stops, Is.Zero);
                 events.Add("partial:stop");
                 throw new ApplicationException("cleanup failed");
             }
@@ -101,9 +95,9 @@ public class PluginLifecycleTest
         Assert.That(error, Is.SameAs(original));
         Assert.That(error!.Data["PluginCleanupErrors"], Is.TypeOf<AggregateException>());
         Assert.That(events, Is.EqualTo(new[] { "counter:init", "partial:init", "partial:stop", "counter:stop" }));
-        Assert.That(counter!.Disposals, Is.EqualTo(1));
+        Assert.That(counter!.Stops, Is.EqualTo(1));
         await host.StopAsync();
-        Assert.That(counter.Disposals, Is.EqualTo(1));
+        Assert.That(counter.Stops, Is.EqualTo(1));
         Assert.Throws<InvalidOperationException>(() => host.StartAsync());
     }
 
@@ -114,7 +108,7 @@ public class PluginLifecycleTest
         var unwinding = new TaskCompletionSource<bool>();
         var release = new TaskCompletionSource<bool>();
         var events = new List<string>();
-        var host = new PluginHost(new Plugin<IFirst>
+        var host = new PluginHost(new Plugin<First>
         {
             Initialize = async (_, ct) =>
             {
@@ -142,16 +136,20 @@ public class PluginLifecycleTest
     }
 
     [Test]
-    public async Task PrivateRegistrationCannotReplaceAnExportedCapability()
+    public async Task PluginCannotAccessAnUndeclaredDependencyDuringInitialization()
     {
-        var initialized = false;
-        var host = new PluginHost(new Plugin<IFirst>
+        var events = new List<string>();
+        var host = new PluginHost(new CounterPlugin(events), new Plugin<First>
         {
-            Configure = r => r.Export<IFirst, First>(),
-            Initialize = (_, _) => { initialized = true; return Task.CompletedTask; }
-        }, new Plugin<ISecond> { Configure = r => r.RegisterInstance<IFirst>(new First()) });
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => await host.StartAsync());
-        Assert.That(initialized, Is.False);
+            Initialize = (plugins, _) =>
+            {
+                plugins.Get<CounterPlugin>();
+                return Task.CompletedTask;
+            }
+        });
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await host.StartAsync());
+        Assert.That(error!.Message, Does.Contain("did not declare dependency"));
+        Assert.That(events, Is.EqualTo(new[] { "counter:init", "counter:stop" }));
         await host.StopAsync();
     }
 }

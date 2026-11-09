@@ -61,17 +61,15 @@ public class SaveDiagnosticsPluginTest
         var store = new Store();
         var host = new PluginHost(new SavePlugin(store));
         await host.StartAsync();
-        var save = host.Context.Get<ISaveManager>();
-        var binding = host.Context.Get<ISaveBinding>();
-        Assert.That(binding, Is.SameAs(save));
+        var save = host.Context.Get<SavePlugin>();
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await save.SaveAsync("slot"));
-        Assert.Throws<InvalidOperationException>(() => binding.Bind(new Architecture()));
+        Assert.Throws<InvalidOperationException>(() => save.Bind(new Architecture()));
         Architecture.InitInterface(host.Context);
-        var architecture = Architecture.Arch;
+        var architecture = Architecture.Interface;
         try
         {
-            binding.Bind(architecture);
-            Assert.Throws<InvalidOperationException>(() => binding.Bind(architecture));
+            save.Bind(architecture);
+            Assert.Throws<InvalidOperationException>(() => save.Bind(architecture));
             var model = architecture.GetModel<IPlayerModel>();
             model.Value = 42;
             await save.SaveAsync("slot");
@@ -79,10 +77,10 @@ public class SaveDiagnosticsPluginTest
             model.Value = 9;
             await save.LoadAsync("slot");
             Assert.That(model.Value, Is.EqualTo(42));
-            await binding.UnbindAsync();
+            await save.UnbindAsync();
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await save.LoadAsync("slot"));
-            binding.Bind(architecture);
-            await binding.UnbindAsync();
+            save.Bind(architecture);
+            await save.UnbindAsync();
         }
         finally
         {
@@ -100,11 +98,11 @@ public class SaveDiagnosticsPluginTest
         var host = new PluginHost(new SavePlugin(store));
         await host.StartAsync();
         Architecture.InitInterface(host.Context);
-        var architecture = Architecture.Arch;
+        var architecture = Architecture.Interface;
         try
         {
-            host.Context.Get<ISaveBinding>().Bind(architecture);
-            var save = host.Context.Get<ISaveManager>();
+            var save = host.Context.Get<SavePlugin>();
+            save.Bind(architecture);
             var pending = save.SaveAsync("slot");
             await store.Entered.Task;
             var stop = host.StopAsync();
@@ -140,7 +138,7 @@ public class SaveDiagnosticsPluginTest
         {
             Assert.That(Directory.Exists(directory), Is.False);
             await host.StartAsync();
-            var diagnostics = host.Context.Get<IDiagnosticsManager>();
+            var diagnostics = host.Context.Get<DiagnosticsPlugin>();
             var logger = diagnostics.GetLogger("PluginTest");
             logger.Information("hidden-message");
             logger.Warning("visible-message");

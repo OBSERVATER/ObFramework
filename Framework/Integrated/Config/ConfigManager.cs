@@ -8,20 +8,13 @@ using ObFramework.Integrated.Resource;
 
 namespace ObFramework.Integrated.Config
 {
-    public interface IConfigManager
+    internal sealed class ConfigManager
     {
-        Task LoadAllAsync(IConfigCatalog catalog, CancellationToken ct = default);
-        IReadOnlyList<T> Get<T>() where T : class, IConfig;
-        T? Get<T>(int id) where T : class, IConfig;
-    }
-
-    internal sealed class ConfigManager : IConfigManager
-    {
-        private readonly IAssetManager _assets;
+        private readonly ResourcePlugin _assets;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private Dictionary<Type, IReadOnlyDictionary<int, IConfig>> _configMap = new Dictionary<Type, IReadOnlyDictionary<int, IConfig>>();
         private bool _stopped;
-        public ConfigManager(IAssetManager assets) => _assets = assets;
+        public ConfigManager(ResourcePlugin assets) => _assets = assets;
         public async Task LoadAllAsync(IConfigCatalog catalog, CancellationToken ct = default)
         {
             if (catalog == null)

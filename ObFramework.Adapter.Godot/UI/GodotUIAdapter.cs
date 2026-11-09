@@ -10,8 +10,8 @@ namespace ObFramework.Adapter.Godot.UI
     public class GodotUIAdapter : IUIAdapter
     {
         public UIRoot Root;
-        private readonly IAssetManager _assets;
-        public GodotUIAdapter(IAssetManager assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
+        private readonly ResourcePlugin _assets;
+        public GodotUIAdapter(ResourcePlugin assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
             => await CreateAsync(typeof(T), ct) as T;
 

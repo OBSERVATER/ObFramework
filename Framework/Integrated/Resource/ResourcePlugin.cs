@@ -2,24 +2,36 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core;
+using ObFramework.Integrated.Resource.Handle;
 
 namespace ObFramework.Integrated.Resource
 {
-    public sealed class ResourcePlugin<TNativeHandle> : IPlugin
+    public sealed class ResourcePlugin : IPlugin
     {
-        private readonly IAssetAdapter<TNativeHandle> _adapter;
-        public ResourcePlugin(IAssetAdapter<TNativeHandle> adapter) => _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
-        public void Register(PluginRegistration registration)
+        private readonly Func<IAssetManager> _createManager;
+        private IAssetManager? _manager;
+        private IAssetManager Manager => _manager ?? throw new InvalidOperationException("Resource plugin is not initialized.");
+
+        private ResourcePlugin(Func<IAssetManager> createManager) => _createManager = createManager;
+
+        public static ResourcePlugin Create<TNativeHandle>(IAssetAdapter<TNativeHandle> adapter)
         {
-            registration.RegisterInstance<IAssetAdapter<TNativeHandle>>(_adapter);
-            registration.Export<IAssetManager, AssetManager<TNativeHandle>>();
+            if (adapter == null)
+                throw new ArgumentNullException(nameof(adapter));
+            return new ResourcePlugin(() => new AssetManager<TNativeHandle>(adapter));
         }
-        public Task InitAsync(IPluginContext plugins, CancellationToken ct)
+
+        public IHandle LoadAsset<T>(string location) where T : class => Manager.LoadAsset<T>(location);
+        public Task<IHandle> LoadAssetAsync<T>(string location, CancellationToken ct = default) where T : class => Manager.LoadAssetAsync<T>(location, ct);
+        public Task<RawFileHandle> LoadRawFileAsync(string location, CancellationToken ct = default) => Manager.LoadRawFileAsync(location, ct);
+
+        void IPlugin.Register(PluginRegistration registration) { }
+        Task IPlugin.InitAsync(IPluginContext plugins, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            plugins.Get<IAssetManager>();
+            _manager = _createManager();
             return Task.CompletedTask;
         }
-        public Task StopAsync(IPluginContext plugins) => ((AssetManager<TNativeHandle>)plugins.Get<IAssetManager>()).StopAsync();
+        Task IPlugin.StopAsync(IPluginContext plugins) => _manager?.StopAsync() ?? Task.CompletedTask;
     }
 }

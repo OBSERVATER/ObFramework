@@ -7,18 +7,7 @@ using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.UI
 {
-    public interface IUIManager
-    {
-        Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow;
-        bool TryGet<T>(out T? instance) where T : class, IUIWindow;
-        bool Close(IUIWindow instance);
-        bool Close<T>() where T : class, IUIWindow;
-        int CloseAll<T>() where T : class, IUIWindow;
-        void Push<T>(T ui) where T : IUIWindow;
-        Task<T?> Pop<T>() where T : class, IUIWindow;
-    }
-
-    internal sealed class UIManager : IUIManager, IDisposable
+    internal sealed class UIManager : IDisposable
     {
         private readonly IUIAdapter _adapter;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);

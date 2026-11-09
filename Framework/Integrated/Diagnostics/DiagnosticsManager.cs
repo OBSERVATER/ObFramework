@@ -6,12 +6,7 @@ using Serilog.Events;
 
 namespace ObFramework.Integrated.Diagnostics
 {
-    public interface IDiagnosticsManager
-    {
-        ILogger GetLogger(string source);
-    }
-
-    internal sealed class DiagnosticsManager : IDiagnosticsManager, IDisposable
+    internal sealed class DiagnosticsManager
     {
         private ILogger? _logger;
         private Logger? _ownedLogger;
@@ -36,7 +31,6 @@ namespace ObFramework.Integrated.Diagnostics
             _logger = null;
             logger?.Dispose();
         }
-        public void Dispose() => Shutdown();
 
         private sealed class BorrowedSink : ILogEventSink
         {

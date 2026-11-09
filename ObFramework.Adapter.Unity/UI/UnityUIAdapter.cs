@@ -13,8 +13,8 @@ namespace ObFramework.Adapter.Unity.UI
     public class UnityUIAdapter : IUIAdapter
     {
         public UIRoot Root;
-        private readonly IAssetManager _assets;
-        public UnityUIAdapter(IAssetManager assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
+        private readonly ResourcePlugin _assets;
+        public UnityUIAdapter(ResourcePlugin assets) => _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         private readonly Dictionary<IUIWindow, IHandle> _handles = new();
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow 
             => await CreateAsync(typeof(T), ct) as T;

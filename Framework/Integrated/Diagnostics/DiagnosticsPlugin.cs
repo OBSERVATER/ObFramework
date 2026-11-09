@@ -15,6 +15,7 @@ namespace ObFramework.Integrated.Diagnostics
         private readonly string? _configDirectory;
         private readonly ILogEventSink? _extraSink;
         private readonly ILogger? _externalLogger;
+        private readonly DiagnosticsManager _manager = new DiagnosticsManager();
         public DiagnosticsPlugin(DiagnosticsOption option, ILogEventSink? extraSink = null)
         {
             if (option == null)
@@ -32,13 +33,15 @@ namespace ObFramework.Integrated.Diagnostics
             _extraSink = extraSink;
         }
         public DiagnosticsPlugin(ILogger logger) => _externalLogger = logger ?? throw new ArgumentNullException(nameof(logger));
-        public void Register(PluginRegistration registration) => registration.Export<IDiagnosticsManager, DiagnosticsManager>();
-        public async Task InitAsync(IPluginContext plugins, CancellationToken ct)
+
+        public ILogger GetLogger(string source) => _manager.GetLogger(source);
+
+        void IPlugin.Register(PluginRegistration registration) { }
+        async Task IPlugin.InitAsync(IPluginContext plugins, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
-            var manager = (DiagnosticsManager)plugins.Get<IDiagnosticsManager>();
             if (_externalLogger != null)
-                manager.Initialize(_externalLogger);
+                _manager.Initialize(_externalLogger);
             else
             {
                 var option = _option;
@@ -48,12 +51,12 @@ namespace ObFramework.Integrated.Diagnostics
                     option = JsonConvert.DeserializeObject<DiagnosticsOption>(raw) ?? throw new JsonSerializationException("Invalid diagnostics configuration.");
                 }
                 ct.ThrowIfCancellationRequested();
-                manager.Initialize(option, _extraSink);
+                _manager.Initialize(option, _extraSink);
             }
         }
-        public Task StopAsync(IPluginContext plugins)
+        Task IPlugin.StopAsync(IPluginContext plugins)
         {
-            ((DiagnosticsManager)plugins.Get<IDiagnosticsManager>()).Shutdown();
+            _manager.Shutdown();
             return Task.CompletedTask;
         }
     }

@@ -46,9 +46,9 @@ public class ResourceConfigPluginTest
     {
         var adapter = new AssetAdapter();
         adapter.Files["raw"] = "hello";
-        var host = new PluginHost(new ResourcePlugin<int>(adapter));
+        var host = new PluginHost(ResourcePlugin.Create(adapter));
         await host.StartAsync();
-        var assets = host.Context.Get<IAssetManager>();
+        var assets = host.Context.Get<ResourcePlugin>();
         var first = assets.LoadAsset<Payload>("asset");
         var second = assets.LoadAsset<Payload>("asset");
         var third = await assets.LoadAssetAsync<Payload>("asset");
@@ -72,9 +72,9 @@ public class ResourceConfigPluginTest
     public async Task InvalidLoadReleasesNativeHandleAndAllowsRetry()
     {
         var adapter = new AssetAdapter { InvalidAsset = true };
-        var host = new PluginHost(new ResourcePlugin<int>(adapter));
+        var host = new PluginHost(ResourcePlugin.Create(adapter));
         await host.StartAsync();
-        var assets = host.Context.Get<IAssetManager>();
+        var assets = host.Context.Get<ResourcePlugin>();
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await assets.LoadAssetAsync<Payload>("bad"));
         Assert.That(adapter.Released, Is.EqualTo(new[] { 1 }));
         adapter.InvalidAsset = false;
@@ -88,9 +88,9 @@ public class ResourceConfigPluginTest
     public async Task CancelingOneCallerDoesNotCancelOtherUsersOfTheSameLoad()
     {
         var adapter = new AssetAdapter { Block = true };
-        var host = new PluginHost(new ResourcePlugin<int>(adapter));
+        var host = new PluginHost(ResourcePlugin.Create(adapter));
         await host.StartAsync();
-        var assets = host.Context.Get<IAssetManager>();
+        var assets = host.Context.Get<ResourcePlugin>();
         using var cancellation = new CancellationTokenSource();
         var first = assets.LoadAssetAsync<Payload>("shared", cancellation.Token);
         await adapter.Entered.Task;
@@ -110,9 +110,9 @@ public class ResourceConfigPluginTest
     public async Task ShutdownWaitsForPendingLoadAndReleasesLateResults()
     {
         var adapter = new AssetAdapter { Block = true, IgnoreCancellation = true };
-        var host = new PluginHost(new ResourcePlugin<int>(adapter));
+        var host = new PluginHost(ResourcePlugin.Create(adapter));
         await host.StartAsync();
-        var load = host.Context.Get<IAssetManager>().LoadAssetAsync<Payload>("pending");
+        var load = host.Context.Get<ResourcePlugin>().LoadAssetAsync<Payload>("pending");
         await adapter.Entered.Task;
         var stop = host.StopAsync();
         Assert.That(stop.IsCompleted, Is.False);
@@ -137,9 +137,9 @@ public class ResourceConfigPluginTest
     {
         var adapter = new AssetAdapter();
         adapter.Files["rows"] = "[{\"Id\":7,\"Name\":\"seven\"}]";
-        var host = new PluginHost(new ConfigPlugin(new Catalog()), new ResourcePlugin<int>(adapter));
+        var host = new PluginHost(new ConfigPlugin(new Catalog()), ResourcePlugin.Create(adapter));
         await host.StartAsync();
-        var config = host.Context.Get<IConfigManager>();
+        var config = host.Context.Get<ConfigPlugin>();
         Assert.That(config.Get<Row>(7)!.Name, Is.EqualTo("seven"));
         Assert.That(config.Get<Row>().Count, Is.EqualTo(1));
         Assert.That(config.Get<Row>(8), Is.Null);
@@ -160,10 +160,10 @@ public class ResourceConfigPluginTest
         await missing.StopAsync();
         var adapter = new AssetAdapter();
         adapter.Files["rows"] = "null";
-        var host = new PluginHost(new ResourcePlugin<int>(adapter), new ConfigPlugin(new Catalog()));
+        var host = new PluginHost(ResourcePlugin.Create(adapter), new ConfigPlugin(new Catalog()));
         await Assert.CatchAsync<JsonException>(async () => await host.StartAsync());
         Assert.That(adapter.Released, Is.EqualTo(new[] { 1 }));
-        Assert.Throws<InvalidOperationException>(() => host.Context.Get<IConfigManager>());
+        Assert.Throws<InvalidOperationException>(() => host.Context.Get<ConfigPlugin>());
         await host.StopAsync();
     }
 }

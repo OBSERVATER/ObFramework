@@ -102,7 +102,7 @@ internal class CoreArchitectureTest
     [Test]
     public async Task CoreTest_BasicCoreEvent()
     {
-        var self = TestArchitecture.Arch;
+        var self = TestArchitecture.Interface;
         try
         {
             Assert.That(self.GetModel<ITestModel>().Get(), Is.EqualTo(0));

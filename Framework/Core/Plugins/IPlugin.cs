@@ -12,6 +12,6 @@ namespace ObFramework.Core
 
     public interface IPluginContext
     {
-        T Get<T>() where T : class;
+        T Get<T>() where T : class, IPlugin;
     }
 }

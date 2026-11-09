@@ -9,17 +9,7 @@ using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.Save
 {
-    public interface ISaveManager
-    {
-        Task LoadAsync(string slotId);
-        Task SaveAsync(string slotId);
-    }
-    public interface ISaveBinding
-    {
-        void Bind(IArchitecture architecture);
-        Task UnbindAsync();
-    }
-    internal class SaveManager : ISaveManager, ISaveBinding
+    internal class SaveManager
     {
         private readonly ISaveStore _store;
         private readonly Dictionary<string, ICanSave> _targets;

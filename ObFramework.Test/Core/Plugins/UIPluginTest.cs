@@ -22,7 +22,7 @@ public class UIPluginTest
     public sealed class Data : IUIData { }
     public sealed class Adapter : IUIAdapter, IDisposable
     {
-        public readonly IAssetManager? Assets;
+        public readonly ResourcePlugin? Assets;
         public int Created;
         public int Released;
         public int Disposals;
@@ -31,7 +31,7 @@ public class UIPluginTest
         public TaskCompletionSource<bool> Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> Complete = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Dictionary<IUIWindow, IHandle> _handles = new();
-        public Adapter(IAssetManager? assets = null) => Assets = assets;
+        public Adapter(ResourcePlugin? assets = null) => Assets = assets;
         public async Task<T?> CreateAsync<T>(CancellationToken ct = default) where T : class, IUIWindow => (T)await CreateAsync(typeof(T), ct);
         public async Task<IUIWindow> CreateAsync(Type type, CancellationToken ct = default)
         {
@@ -66,7 +66,7 @@ public class UIPluginTest
         var adapter = new Adapter();
         var host = new PluginHost(new UIPlugin(adapter, 1));
         await host.StartAsync();
-        var ui = host.Context.Get<IUIManager>();
+        var ui = host.Context.Get<UIPlugin>();
         var first = await ui.OpenAsync<Window>();
         var data = new Data();
         Assert.That(await ui.OpenAsync<Window>(data: data), Is.SameAs(first));
@@ -86,7 +86,7 @@ public class UIPluginTest
     }
 
     [Test]
-    public async Task UIUsesTheSharedResourceManagerAndStopsWhileResourcesAreAvailable()
+    public async Task UIUsesTheSharedResourcePluginAndStopsWhileResourcesAreAvailable()
     {
         var assetsAdapter = new AssetAdapter();
         Adapter? adapter = null;
@@ -97,10 +97,10 @@ public class UIPluginTest
             rootStopped = true;
             return Task.CompletedTask;
         });
-        var host = new PluginHost(plugin, new ResourcePlugin<int>(assetsAdapter));
+        var host = new PluginHost(plugin, ResourcePlugin.Create(assetsAdapter));
         await host.StartAsync();
-        Assert.That(adapter!.Assets, Is.SameAs(host.Context.Get<IAssetManager>()));
-        var ui = host.Context.Get<IUIManager>();
+        Assert.That(adapter!.Assets, Is.SameAs(host.Context.Get<ResourcePlugin>()));
+        var ui = host.Context.Get<UIPlugin>();
         var cached = await ui.OpenAsync<Window>();
         ui.Close(cached!);
         await ui.OpenAsync<OtherWindow>();
@@ -119,7 +119,7 @@ public class UIPluginTest
         var rootStopped = false;
         var host = new PluginHost(new UIPlugin(adapter, shutdown: _ => { rootStopped = true; return Task.CompletedTask; }));
         await host.StartAsync();
-        var ui = host.Context.Get<IUIManager>();
+        var ui = host.Context.Get<UIPlugin>();
         var cached = await ui.OpenAsync<Window>();
         ui.Close(cached!);
         await ui.OpenAsync<OtherWindow>();
@@ -135,7 +135,7 @@ public class UIPluginTest
         var adapter = new Adapter { Block = true };
         var host = new PluginHost(new UIPlugin(adapter));
         await host.StartAsync();
-        var open = host.Context.Get<IUIManager>().OpenAsync<Window>();
+        var open = host.Context.Get<UIPlugin>().OpenAsync<Window>();
         await adapter.Entered.Task;
         var stop = host.StopAsync();
         Assert.That(stop.IsCompleted, Is.False);
