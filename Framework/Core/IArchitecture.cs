@@ -5,12 +5,15 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ObFramework.Core.FrameLoop;
 using VContainer;
 
 namespace ObFramework.Core
 {
     public interface IArchitecture
     {
+        FrameDispatcher Frame { get; }
+        
         void RegisterSystem<I, T>() where I : ISystem where T : class, I, new();
         void RegisterModel<I, T>() where I : IModel where T : class, I, new();
         void RegisterLocalService<I, T>(ICanRegisterService self) where I : IService where T : class, I;
@@ -40,8 +43,9 @@ namespace ObFramework.Core
         private IArchitectureLifecycleCoordinator _lifecycleService;
         private bool _initialized = false;
         private IPluginContext? _plugins;
+        private FrameDispatcher? _frame;
+        public FrameDispatcher Frame => _frame ?? throw new InvalidOperationException("no frame dispatcher found");
         public IPluginContext Plugins => _plugins ?? throw new InvalidOperationException("Architecture has no plugin context.");
-
         public bool Initialized => _initialized;
         public static IArchitecture Interface
         {
@@ -81,6 +85,7 @@ namespace ObFramework.Core
             var architecture = new T();
             Architecture = architecture;
             architecture._plugins = plugins;
+            architecture._frame = new FrameDispatcher();
             var builder = new ContainerBuilder();
             architecture._lifecycleService = new ArchitectureLifecycleCoordinator(builder, architecture);
             try

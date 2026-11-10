@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core.Async;
+using ObFramework.Core.FrameLoop;
 
 namespace ObFramework.Core
 {
@@ -12,6 +13,7 @@ namespace ObFramework.Core
         private readonly CancellationTokenSource _startup = new CancellationTokenSource();
         private PluginHost? _host;
         private IArchitecture? _architecture;
+        private IFrameLoopDriver? _driver;
         private Task? _startTask;
         private Task? _stopTask;
         private bool _stopping;
@@ -24,14 +26,14 @@ namespace ObFramework.Core
         protected virtual Task StopGameAsync() => Task.CompletedTask;
         protected virtual void ReleaseAdapters() { }
 
-        public Task StartAsync()
+        public Task StartAsync(IFrameLoopDriver? driver = null)
         {
             if (_startTask != null || _stopping)
                 throw new InvalidOperationException("Application can only be started once.");
-            return _startTask = StartCoreAsync();
+            return _startTask = StartCoreAsync(driver);
         }
 
-        private async Task StartCoreAsync()
+        private async Task StartCoreAsync(IFrameLoopDriver? driver)
         {
             try
             {
@@ -41,6 +43,13 @@ namespace ObFramework.Core
                 _architecture = CreateArchitecture(_host.Context);
                 _startup.Token.ThrowIfCancellationRequested();
                 await EnterGameAsync(_startup.Token);
+                _startup.Token.ThrowIfCancellationRequested();
+
+                if (driver != null)
+                {
+                    _driver = driver;
+                    _driver.Bind(_architecture.Frame);
+                }
                 _startup.Token.ThrowIfCancellationRequested();
             }
             catch (Exception error)
@@ -94,6 +103,9 @@ namespace ObFramework.Core
                 return;
             _cleaned = true;
             var errors = new List<Exception>();
+            try { _driver?.Unbind(); }
+            catch (Exception error) { errors.Add(error); }
+            finally { _driver = null; }
             try { await _work.StopAsync(); }
             catch (Exception error) { errors.Add(error); }
             if (_architecture != null)

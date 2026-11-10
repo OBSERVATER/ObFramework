@@ -13,10 +13,7 @@ namespace ObFramework.Core.Async
         {
             lock (_gate)
             {
-                if (!_alive)
-                    throw new InvalidOperationException("Lifetime is inactive.");
-
-                return _version;
+                return !_alive ? throw new InvalidOperationException("Lifetime is inactive.") : _version;
             }
         }
 

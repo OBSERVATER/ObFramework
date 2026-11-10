@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using ObFramework.Core.FrameLoop;
 using VContainer;
 
 namespace ObFramework.Core
@@ -50,6 +51,9 @@ namespace ObFramework.Core
                 system.Init();
                 system.Initialized = true;
                 _initializedObjects.Add(system);
+                
+                if (system is IFrameTickable tickable)
+                    _architecture.Frame.Register(tickable);
             }
         }
         public void Deinit()
@@ -62,6 +66,8 @@ namespace ObFramework.Core
 
                 try
                 {
+                    if (instance is IFrameTickable tickable)
+                        _architecture.Frame.UnRegister(tickable);
                     instance.Deinit();
                 }
                 catch (Exception ex)

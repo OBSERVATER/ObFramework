@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using Godot;
 using ObFramework.Core;
@@ -17,15 +17,17 @@ namespace ObFramework.Adapter.Godot.Core
         {
             base._Ready();
             GetTree().AutoAcceptQuit = false;
-            _ = RunLaunchAsync();
+            var bridge = new GodotFrameLoopBridge();
+            AddChild(bridge);
+            _ = RunLaunchAsync(bridge);
         }
 
-        private async Task RunLaunchAsync()
+        private async Task RunLaunchAsync(GodotFrameLoopBridge bridge)
         {
             try
             {
                 _application = CreateApplication();
-                await _application.StartAsync();
+                await _application.StartAsync(bridge);
             }
             catch (OperationCanceledException) { }
             catch (Exception error) { GD.PushError(error.ToString()); }

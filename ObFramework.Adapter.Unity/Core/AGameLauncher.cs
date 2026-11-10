@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Threading.Tasks;
 using ObFramework.Adapter.Unity.UI;
 using ObFramework.Core;
@@ -21,7 +22,7 @@ namespace ObFramework.Adapter.Unity.Core
             try
             {
                 _application = CreateApplication();
-                await _application.StartAsync();
+                await _application.StartAsync(new UnityFrameLoopBridge());
             }
             catch (OperationCanceledException) { }
             catch (Exception error) { Debug.LogError(error); }
