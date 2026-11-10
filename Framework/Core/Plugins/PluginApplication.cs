@@ -30,17 +30,29 @@ namespace ObFramework.Core
         {
             if (_startTask != null || _stopping)
                 throw new InvalidOperationException("Application can only be started once.");
-            return _startTask = StartCoreAsync(driver);
+            var completion = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _startTask = completion.Task.Unwrap();
+            completion.SetResult(StartCoreAsync(driver));
+            return _startTask;
         }
 
         private async Task StartCoreAsync(IFrameLoopDriver? driver)
         {
             try
             {
+                var applicationDriver = driver as IApplicationFrameLoopDriver;
+                if (applicationDriver != null)
+                {
+                    _driver = applicationDriver;
+                    applicationDriver.BeginStartup(_startup.Token);
+                    _startup.Token.ThrowIfCancellationRequested();
+                }
                 _host = new PluginHost(CreatePlugins());
                 await _host.StartAsync(_startup.Token);
                 _startup.Token.ThrowIfCancellationRequested();
                 _architecture = CreateArchitecture(_host.Context);
+                _startup.Token.ThrowIfCancellationRequested();
+                applicationDriver?.Prepare(_architecture);
                 _startup.Token.ThrowIfCancellationRequested();
                 await EnterGameAsync(_startup.Token);
                 _startup.Token.ThrowIfCancellationRequested();
@@ -73,7 +85,10 @@ namespace ObFramework.Core
             if (_stopTask != null)
                 return _stopTask;
             _stopping = true;
-            return _stopTask = StopCoreAsync();
+            var completion = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _stopTask = completion.Task.Unwrap();
+            completion.SetResult(StopCoreAsync());
+            return _stopTask;
         }
 
         private async Task StopCoreAsync()
@@ -103,9 +118,15 @@ namespace ObFramework.Core
                 return;
             _cleaned = true;
             var errors = new List<Exception>();
-            try { _driver?.Unbind(); }
+            var driver = _driver;
+            _driver = null;
+            try { driver?.Unbind(); }
             catch (Exception error) { errors.Add(error); }
-            finally { _driver = null; }
+            if (driver is IApplicationFrameLoopDriver applicationDriver)
+            {
+                try { await applicationDriver.ReleaseAsync(); }
+                catch (Exception error) { errors.Add(error); }
+            }
             try { await _work.StopAsync(); }
             catch (Exception error) { errors.Add(error); }
             if (_architecture != null)

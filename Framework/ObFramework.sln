@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ObFramework.Adapter.Godot",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ObFramework.Adapter.UnrealSharp", "..\ObFramework.Adapter.UnrealSharp\ObFramework.Adapter.UnrealSharp.csproj", "{9154A27E-2078-4D12-B2C7-7E28A15D705D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ObFramework.Generator.Unity", "..\ObFramework.Generator.Unity\ObFramework.Generator.Unity.csproj", "{B6C91363-2E35-42A1-970C-CDB477856498}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,6 +56,10 @@ Global
 		{9154A27E-2078-4D12-B2C7-7E28A15D705D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9154A27E-2078-4D12-B2C7-7E28A15D705D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9154A27E-2078-4D12-B2C7-7E28A15D705D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B6C91363-2E35-42A1-970C-CDB477856498}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B6C91363-2E35-42A1-970C-CDB477856498}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B6C91363-2E35-42A1-970C-CDB477856498}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B6C91363-2E35-42A1-970C-CDB477856498}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

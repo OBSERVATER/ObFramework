@@ -1,5 +1,9 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ObFramework.Adapter.Unity.ViewBinding;
+using ObFramework.Core;
 using ObFramework.Core.FrameLoop;
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
@@ -10,10 +14,28 @@ namespace ObFramework.Adapter.Unity.Core
     internal struct ObFFixedTick { }
     internal struct ObFLateTick { }
 
-    public sealed class UnityFrameLoopBridge : IFrameLoopDriver
+    public sealed class UnityFrameLoopBridge : IApplicationFrameLoopDriver
     {
-        private FrameDispatcher _dispatcher;
+        private readonly Func<bool> _canDispatch;
+        private FrameDispatcher? _dispatcher;
+        private UnityViewBindings? _views;
         private bool _installed;
+
+        public UnityFrameLoopBridge() =>
+            _canDispatch = () => _dispatcher != null && (_views?.IsReady ?? true);
+
+        void IApplicationFrameLoopDriver.BeginStartup(CancellationToken stopping) =>
+            _views = new UnityViewBindings(stopping);
+
+        void IApplicationFrameLoopDriver.Prepare(IArchitecture architecture) => _views!.Prepare(architecture);
+
+        async Task IApplicationFrameLoopDriver.ReleaseAsync()
+        {
+            var views = _views;
+            _views = null;
+            if (views != null)
+                await views.ReleaseAsync();
+        }
 
         public void Bind(FrameDispatcher dispatcher)
         {
@@ -62,9 +84,26 @@ namespace ObFramework.Adapter.Unity.Core
             _installed = false;
         }
 
-        private void OnTick() => _dispatcher?.Dispatch();
-        private void OnFixedTick() => _dispatcher?.DispatchFixed();
-        private void OnLateTick() => _dispatcher?.DispatchLate();
+        private void OnTick() => Dispatch((frame, canContinue) => frame.Dispatch(canContinue), update: true);
+        private void OnFixedTick() => Dispatch((frame, canContinue) => frame.DispatchFixed(canContinue));
+        private void OnLateTick() => Dispatch((frame, canContinue) => frame.DispatchLate(canContinue));
+
+        private void Dispatch(Action<FrameDispatcher, Func<bool>> phase, bool update = false)
+        {
+            var dispatcher = _dispatcher;
+            if (dispatcher == null || !_canDispatch())
+                return;
+
+            var views = _views;
+            views?.BeginOperation();
+            try
+            {
+                if (update)
+                    views?.BeforeUpdate();
+                phase(dispatcher, _canDispatch);
+            }
+            finally { views?.EndOperation(); }
+        }
 
         private static bool Contains(PlayerLoopSystem root, Type type)
         {

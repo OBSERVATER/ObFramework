@@ -1,4 +1,5 @@
 using ObFramework.Core;
+using ObFramework.Core.FrameLoop;
 using ObFramework.Extension;
 
 namespace ObFramework.Test.Core.Plugins;
@@ -56,6 +57,51 @@ public class PluginApplicationTest
             return Task.CompletedTask;
         }
         protected override void ReleaseAdapters() => Plugin.Events.Add("adapter-release");
+    }
+
+    private sealed class ApplicationDriver : IApplicationFrameLoopDriver
+    {
+        private readonly List<string> _events;
+        public Action? OnRelease;
+        public ApplicationDriver(List<string> events) => _events = events;
+        public void BeginStartup(CancellationToken stopping) => _events.Add("driver-startup");
+        public void Prepare(IArchitecture architecture)
+        {
+            Assert.That(architecture.GetSystem<IBusiness>().Initialized, Is.True);
+            _events.Add("driver-prepare");
+        }
+        public void Bind(FrameDispatcher dispatcher) => _events.Add("driver-bind");
+        public void Unbind() => _events.Add("driver-unbind");
+        public Task ReleaseAsync()
+        {
+            OnRelease?.Invoke();
+            _events.Add("driver-release");
+            return Task.CompletedTask;
+        }
+    }
+
+    [Test]
+    public async Task DriverPreparesBeforeEntryAndReleasesBeforeDependenciesWithReentrantStop()
+    {
+        var application = new Application();
+        var driver = new ApplicationDriver(application.Plugin.Events);
+        Task? reentrantStop = null;
+        driver.OnRelease = () =>
+        {
+            Assert.That(application.Architecture.GetSystem<IBusiness>().Initialized, Is.True);
+            reentrantStop = application.StopAsync();
+        };
+
+        await application.StartAsync(driver);
+        var stop = application.StopAsync();
+        await stop;
+
+        Assert.That(reentrantStop, Is.SameAs(stop));
+        Assert.That(application.Plugin.Events, Is.EqualTo(new[]
+        {
+            "driver-startup", "plugin-start", "architecture-start", "driver-prepare", "enter", "driver-bind", "driver-unbind",
+            "driver-release", "business-stop", "architecture-stop", "plugin-stop", "adapter-release"
+        }));
     }
 
     [Test]
