@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -15,7 +15,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="NUnit" Version="5.0.0" />
     <PackageReference Include="NUnit.Analyzers" Version="4.15.0">
       <PrivateAssets>all</PrivateAssets>
@@ -26,10 +26,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ObFramework.Generator.Unity\ObFramework.Generator.Unity.csproj" />
+    <ProjectReference Include="..\ObFramework.Editor.Core\ObFramework.Editor.Core.csproj" />
     <ProjectReference Include="..\Framework\ObFramework.csproj" />
-	  <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj"
-	  OutputItemType="Analyzer"
-	  ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\ObFramework.Cli\ObFramework.Cli.csproj" />
+    <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
   </ItemGroup>
 
   <ItemGroup>

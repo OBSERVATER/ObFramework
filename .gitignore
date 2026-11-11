@@ -28,6 +28,9 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# Local task scratch area (tickets/spec copies for the UI 2.0 work stream)
+.scratch/
+
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 

@@ -7,16 +7,22 @@ using System.Threading.Tasks;
 
 namespace ObFramework.Integrated.UI
 {
+    /// <summary>
+    /// Owns managed UI state: Single/Multiple activation, the Common-only navigation stack and the
+    /// LRU cache that keeps the VC/View pair together. It drives the business lifecycle on
+    /// <see cref="AUIView"/> while the adapter owns native objects and the binding layer owns the
+    /// final View dispose.
+    /// </summary>
     internal sealed class UIManager : IDisposable
     {
         private readonly IUIAdapter _adapter;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
-        private readonly Dictionary<Type, List<UIKey>> _active = new();
+        private readonly Dictionary<Type, List<UIKey>> _active = new Dictionary<Type, List<UIKey>>();
         private readonly LRUCache<int, UIKey> _cache;
-        private readonly Dictionary<Type, List<int>> _idCacheMap = new();
-        private readonly Stack<UIStackEntry> _stack = new();
-        private int _serialId;
+        private readonly Dictionary<Type, List<int>> _idCacheMap = new Dictionary<Type, List<int>>();
+        private readonly Stack<UIStackEntry> _stack = new Stack<UIStackEntry>();
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
+        private int _serialId;
         private bool _stopping;
 
         public UIManager(IUIAdapter adapter, int cacheCapacity = 16)
@@ -49,6 +55,8 @@ namespace ObFramework.Integrated.UI
                 _stack.Clear();
                 foreach (var key in windows)
                 {
+                    try { key.Instance.View.CloseView(); }
+                    catch (Exception error) { errors.Add(error); }
                     try { _adapter.Close(key.Instance); }
                     catch (Exception error) { errors.Add(error); }
                     try { _adapter.Release(key.Instance); }
@@ -70,10 +78,11 @@ namespace ObFramework.Integrated.UI
 
         #region Open
 
-        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow
+        public async Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default)
+            where T : AUIView
             => await OpenAsync(typeof(T), mode, cancellationToken, data) as T;
 
-        private async Task<IUIWindow?> OpenAsync(Type type, EUIOpenMode mode = EUIOpenMode.Single, CancellationToken cancellationToken = default, IUIData? data = null)
+        private async Task<AUIView?> OpenAsync(Type viewType, EUIOpenMode mode = EUIOpenMode.Single, CancellationToken cancellationToken = default, IUIData? data = null)
         {
             EnsureRunning();
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
@@ -86,10 +95,11 @@ namespace ObFramework.Integrated.UI
                 if (mode != EUIOpenMode.Single && mode != EUIOpenMode.Multiple)
                     throw new ArgumentOutOfRangeException(nameof(mode));
 
-                if (mode == EUIOpenMode.Single && TryGetLatestActive(type, out var activeKey))
+                if (mode == EUIOpenMode.Single && TryGetLatestActive(viewType, out var activeKey))
                 {
                     try
                     {
+                        activeKey.Instance.View.OpenView(data);
                         _adapter.Open(activeKey.Instance, data);
                     }
                     catch
@@ -99,35 +109,35 @@ namespace ObFramework.Integrated.UI
                         throw;
                     }
 
-                    _active[type][^1] = new UIKey(activeKey.Type, activeKey.Instance, activeKey.SerialId, activeKey.Mode, data);
-                    return activeKey.Instance;
+                    _active[viewType][^1] = new UIKey(activeKey.ViewType, activeKey.Instance, activeKey.SerialId, activeKey.Mode, data);
+                    return activeKey.Instance.View;
                 }
 
                 int serialId = NextSerialId;
-                IUIWindow instance;
+                UIViewInstance instance;
 
-                if (TryTakeCached(type, out var cachedKey))
+                if (TryTakeCached(viewType, out var cachedKey))
                 {
                     instance = cachedKey.Instance;
                 }
                 else
                 {
-                    instance = await _adapter.CreateAsync(type, cancellationToken);
+                    instance = await _adapter.CreateAsync(viewType, cancellationToken)
+                        ?? throw new InvalidOperationException($"Failed to create UI view: {viewType.FullName}");
                 }
 
-                if (instance == null)
-                    throw new InvalidOperationException($"Failed to create UI: {type.FullName}");
-
-                var key = new UIKey(type, instance, serialId, mode, data);
+                var key = new UIKey(viewType, instance, serialId, mode, data);
                 bool added = false;
 
                 try
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    instance.View.InitView(data);
                     AddActive(key);
                     added = true;
+                    instance.View.OpenView(data);
                     _adapter.Open(instance, data);
-                    return instance;
+                    return instance.View;
                 }
                 catch
                 {
@@ -148,22 +158,22 @@ namespace ObFramework.Integrated.UI
 
         #region Close
 
-        public bool Close(IUIWindow? instance)
+        public bool Close(AUIView? view)
         {
             EnsureRunning();
-            if (instance == null)
+            if (view == null)
                 return false;
 
-            return TryFindActive(instance, out var key) && MoveToCache(key);
+            return TryFindActive(view, out var key) && MoveToCache(key);
         }
 
-        public bool Close<T>() where T : class, IUIWindow
+        public bool Close<T>() where T : AUIView
         {
             EnsureRunning();
             return TryGetLatestActive(typeof(T), out var key) && MoveToCache(key);
         }
 
-        public int CloseAll<T>() where T : class, IUIWindow
+        public int CloseAll<T>() where T : AUIView
         {
             EnsureRunning();
             if (!_active.TryGetValue(typeof(T), out var keys))
@@ -177,20 +187,20 @@ namespace ObFramework.Integrated.UI
 
         #region Query
 
-        public bool TryGet<T>(out T? instance) where T : class, IUIWindow
+        public bool TryGet<T>(out T? view) where T : AUIView
         {
             EnsureRunning();
-            instance = null;
+            view = null;
             if (!TryGetLatestActive(typeof(T), out var key))
                 return false;
 
-            instance = key.Instance as T;
-            return instance != null;
+            view = key.Instance.View as T;
+            return view != null;
         }
 
-        private bool TryGetLatestActive(Type type, out UIKey key)
+        private bool TryGetLatestActive(Type viewType, out UIKey key)
         {
-            if (_active.TryGetValue(type, out var list) && list.Count > 0)
+            if (_active.TryGetValue(viewType, out var list) && list.Count > 0)
             {
                 key = list[^1];
                 return true;
@@ -200,13 +210,13 @@ namespace ObFramework.Integrated.UI
             return false;
         }
 
-        private bool TryFindActive(IUIWindow instance, out UIKey key)
+        private bool TryFindActive(AUIView view, out UIKey key)
         {
             foreach (var pair in _active)
             {
                 foreach (var item in pair.Value)
                 {
-                    if (!ReferenceEquals(item.Instance, instance))
+                    if (!ReferenceEquals(item.Instance.View, view))
                         continue;
 
                     key = item;
@@ -224,22 +234,24 @@ namespace ObFramework.Integrated.UI
 
         private void AddActive(UIKey key)
         {
-            if (key.Type == null || key.Instance == null || key.SerialId <= 0)
+            if (key.ViewType == null || !key.Instance.IsValid || key.SerialId <= 0)
                 throw new ArgumentException("Invalid UIKey.");
 
             foreach (var pair in _active)
             {
                 foreach (var item in pair.Value)
                 {
-                    if (item.SerialId == key.SerialId || ReferenceEquals(item.Instance, key.Instance))
+                    if (item.SerialId == key.SerialId ||
+                        ReferenceEquals(item.Instance.Window, key.Instance.Window) ||
+                        ReferenceEquals(item.Instance.View, key.Instance.View))
                         throw new InvalidOperationException("Duplicate active UI instance.");
                 }
             }
 
-            if (!_active.TryGetValue(key.Type, out var list))
+            if (!_active.TryGetValue(key.ViewType, out var list))
             {
                 list = new List<UIKey>();
-                _active.Add(key.Type, list);
+                _active.Add(key.ViewType, list);
             }
 
             list.Add(key);
@@ -247,19 +259,19 @@ namespace ObFramework.Integrated.UI
 
         private bool RemoveActive(UIKey key)
         {
-            if (!_active.TryGetValue(key.Type, out var list))
+            if (!_active.TryGetValue(key.ViewType, out var list))
                 return false;
 
             for (int i = 0; i < list.Count; i++)
             {
                 var item = list[i];
-                if (item.SerialId != key.SerialId || !ReferenceEquals(item.Instance, key.Instance))
+                if (item.SerialId != key.SerialId)
                     continue;
 
                 list.RemoveAt(i);
 
                 if (list.Count == 0)
-                    _active.Remove(key.Type);
+                    _active.Remove(key.ViewType);
 
                 return true;
             }
@@ -278,6 +290,7 @@ namespace ObFramework.Integrated.UI
 
             try
             {
+                key.Instance.View.CloseView();
                 _adapter.Close(key.Instance);
                 AddCachedIndex(key);
                 _cache.Add(key.SerialId, key);
@@ -286,16 +299,16 @@ namespace ObFramework.Integrated.UI
             catch
             {
                 _cache.Remove(key.SerialId, false);
-                RemoveCachedIndex(key.SerialId, key.Type);
+                RemoveCachedIndex(key.SerialId, key.ViewType);
                 _adapter.Release(key.Instance);
                 throw;
             }
         }
 
-        private bool TryTakeCached(Type type, out UIKey key)
+        private bool TryTakeCached(Type viewType, out UIKey key)
         {
             key = default;
-            if (!_idCacheMap.TryGetValue(type, out var ids))
+            if (!_idCacheMap.TryGetValue(viewType, out var ids))
                 return false;
 
             while (ids.Count > 0)
@@ -304,11 +317,11 @@ namespace ObFramework.Integrated.UI
 
                 if (_cache.TryTake(id, out key))
                 {
-                    RemoveCachedIndex(id, type);
+                    RemoveCachedIndex(id, viewType);
                     return true;
                 }
 
-                RemoveCachedIndex(id, type);
+                RemoveCachedIndex(id, viewType);
             }
 
             return false;
@@ -316,29 +329,29 @@ namespace ObFramework.Integrated.UI
 
         private void AddCachedIndex(UIKey key)
         {
-            if (!_idCacheMap.TryGetValue(key.Type, out var list))
+            if (!_idCacheMap.TryGetValue(key.ViewType, out var list))
             {
                 list = new List<int>();
-                _idCacheMap.Add(key.Type, list);
+                _idCacheMap.Add(key.ViewType, list);
             }
 
             list.Add(key.SerialId);
         }
 
-        private void RemoveCachedIndex(int id, Type type)
+        private void RemoveCachedIndex(int id, Type viewType)
         {
-            if (!_idCacheMap.TryGetValue(type, out var list))
+            if (!_idCacheMap.TryGetValue(viewType, out var list))
                 return;
 
             list.Remove(id);
 
             if (list.Count == 0)
-                _idCacheMap.Remove(type);
+                _idCacheMap.Remove(viewType);
         }
 
         private void OnCacheRemoved(int id, UIKey key)
         {
-            RemoveCachedIndex(id, key.Type);
+            RemoveCachedIndex(id, key.ViewType);
             _adapter.Release(key.Instance);
         }
 
@@ -346,37 +359,38 @@ namespace ObFramework.Integrated.UI
 
         #region Stack
 
-        public void Push<T>(T ui) where T : IUIWindow
+        public void Push<T>(T view) where T : AUIView
         {
             EnsureRunning();
-            if (ui.Level != EUILevel.Common)
-                throw new InvalidOperationException("Only Common windows can be pushed onto the stack.");
-
-            if (!TryFindActive(ui, out var key))
+            var value = view ?? throw new ArgumentNullException(nameof(view));
+            if (!TryFindActive(value, out var key))
                 return;
 
-            var entry = new UIStackEntry(key.Type, key.Data, key.Mode);
+            if (key.Instance.Window.Level != EUILevel.Common)
+                throw new InvalidOperationException("Only Common windows can be pushed onto the stack.");
+
+            var entry = new UIStackEntry(key.ViewType, key.Data, key.Mode);
 
             if (MoveToCache(key))
                 _stack.Push(entry);
         }
 
-        public async Task<T?> Pop<T>() where T : class, IUIWindow
+        public async Task<T?> Pop<T>() where T : AUIView
         {
             EnsureRunning();
             if (!_stack.TryPeek(out var entry))
                 return null;
 
-            if (!typeof(T).IsAssignableFrom(entry.PanelType))
-                throw new InvalidOperationException($"Stack top is {entry.PanelType.Name}, not {typeof(T).Name}.");
+            if (!typeof(T).IsAssignableFrom(entry.ViewType))
+                throw new InvalidOperationException($"Stack top is {entry.ViewType.Name}, not {typeof(T).Name}.");
 
-            var panel = await OpenAsync(entry.PanelType, entry.Mode, data: entry.Data);
-            if (panel == null)
+            var view = await OpenAsync(entry.ViewType, entry.Mode, data: entry.Data);
+            if (view == null)
                 return null;
 
             EnsureRunning();
             _stack.Pop();
-            return (T)panel;
+            return (T)view;
         }
 
         #endregion

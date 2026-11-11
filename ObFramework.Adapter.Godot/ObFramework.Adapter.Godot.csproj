@@ -1,7 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <!-- Retargeted from netstandard2.1: the installed GodotSharp 4.7.2 targets net8, so a
+             netstandard2.1 project fails with CS1705 on this machine. File layout unchanged. -->
+        <TargetFramework>net8.0</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>9</LangVersion>
     </PropertyGroup>

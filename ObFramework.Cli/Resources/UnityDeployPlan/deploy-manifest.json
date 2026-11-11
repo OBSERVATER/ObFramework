@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "tool": "ob",
+  "deployment": "unity-editor",
+  "manifestPath": "Assets/ObFramework/obf-deploy.json",
+  "targetRoot": "Assets/ObFramework/Editor",
+  "autoDeployResources": true,
+  "exclude": [
+    "deploy-manifest.json",
+    "**/*.md",
+    "docs/**"
+  ],
+  "files": []
+}

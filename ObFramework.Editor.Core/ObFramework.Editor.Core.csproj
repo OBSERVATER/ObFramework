@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Pure, engine-independent UI 2.0 Editor generation core (templates, binding table merge,
+      diagnostics, setup.json snapshot mapping and static UI registry source emission).
+
+      The sources physically live under ObFramework.Adapter.Unity/EditorDeploy/Core so the exact
+      same files can be deployed into a Unity project by `ob unity deploy` and compiled by the
+      Editor asmdef next to the thin UnityEditor glue. This project compiles them for pure .NET
+      tests and for the ObFramework.Adapter.Unity.Editor static compile validation, and must not
+      reference UnityEngine/UnityEditor.
+    -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <LangVersion>9</LangVersion>
+        <Nullable>enable</Nullable>
+        <AssemblyName>ObFramework.Editor.Core</AssemblyName>
+        <RootNamespace>ObFramework.Editor.Core</RootNamespace>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\ObFramework.Adapter.Unity\EditorDeploy\Core\**\*.cs"
+                 Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
+</Project>

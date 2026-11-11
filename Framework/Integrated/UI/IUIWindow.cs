@@ -3,13 +3,12 @@
 namespace ObFramework.Integrated.UI
 {
     /// <summary>
-    /// 窗口
+    /// Engine-side window identity: the native VC type and its UI level. Business lifecycle and
+    /// data live on the paired engine-independent <see cref="AUIView"/>; UIManager owns managed
+    /// open/close state.
     /// </summary>
     public interface IUIWindow : IController
     {
         EUILevel Level { get; }
-        void Init(IUIData? uiData = null);
-        void Open(IUIData? uiData = null);
-        void Close();
     }
 }

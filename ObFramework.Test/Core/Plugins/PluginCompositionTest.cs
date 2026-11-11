@@ -4,6 +4,7 @@ using ObFramework.Integrated.Diagnostics;
 using ObFramework.Integrated.Resource;
 using ObFramework.Integrated.Save;
 using ObFramework.Integrated.UI;
+using ObFramework.Test.Core.UI;
 using ResourceTests = ObFramework.Test.Core.Plugins.ResourceConfigPluginTest;
 using SaveTests = ObFramework.Test.Core.Plugins.SaveDiagnosticsPluginTest;
 
@@ -18,7 +19,7 @@ public class PluginCompositionTest
         public readonly ResourceTests.AssetAdapter Assets = new();
         public readonly SaveTests.Store Store = new();
         public readonly SaveTests.Sink Sink = new();
-        public UIPluginTest.Adapter UI = null!;
+        public TestUIAdapter UI = null!;
         public bool ResourcesAvailableDuringUIStop;
         public Application(string directory)
         {
@@ -28,7 +29,7 @@ public class PluginCompositionTest
         protected override IPlugin[] CreatePlugins() => new IPlugin[]
         {
             new ConfigPlugin(new ResourceTests.Catalog()),
-            new UIPlugin(assets => UI = new UIPluginTest.Adapter(assets), shutdown: async _ =>
+            new UIPlugin(assets => UI = new TestUIAdapter(assets).Map<FirstView>(), shutdown: async _ =>
             {
                 using var handle = await UI.Assets!.LoadRawFileAsync("rows");
                 ResourcesAvailableDuringUIStop = handle.Get<string>()!.Contains("seven");
@@ -74,12 +75,12 @@ public class PluginCompositionTest
             await save.LoadAsync("slot");
             Assert.That(model.Value, Is.EqualTo(42));
             var ui = architecture.GetPlugin<UIPlugin>();
-            var window = await ui.OpenAsync<UIPluginTest.Window>();
-            ui.Close(window!);
+            var view = await ui.OpenAsync<FirstView>();
+            ui.Close(view!);
             architecture.GetPlugin<DiagnosticsPlugin>().GetLogger("Composition").Warning("composition-complete");
             await application.StopAsync();
             Assert.That(application.ResourcesAvailableDuringUIStop, Is.True);
-            Assert.That(application.UI.Released, Is.EqualTo(1));
+            Assert.That(application.UI.ReleasedCount, Is.EqualTo(1));
             Assert.That(application.UI.Disposals, Is.EqualTo(1));
             Assert.That(application.Assets.Released.Count, Is.EqualTo(application.Assets.Reads));
             Assert.That(application.Store.Disposals, Is.EqualTo(1));

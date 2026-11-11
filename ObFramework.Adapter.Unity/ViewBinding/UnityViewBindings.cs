@@ -129,9 +129,20 @@ namespace ObFramework.Adapter.Unity.ViewBinding
 
             try
             {
-                binding.Initialize(source.CreateView(_architecture!));
+                var view = source.CreateView(_architecture!);
+                // The generated binding constructs the business View; the Architecture capability is
+                // injected here so business Views never need a second DI container.
+                if (view is ICanSetArchitecture setter)
+                    setter.SetArchitecture(_architecture!);
+                binding.Initialize(view);
                 if (!controller)
                     RemoveAndRelease(binding);
+                else if (controller.isActiveAndEnabled)
+                {
+                    // A controller that was already active when its binding was created (scene roots)
+                    // missed the generated OnEnable refresh; refresh now that the View exists.
+                    GeneratedViewBinding.Refresh(controller);
+                }
             }
             catch (Exception error)
             {
@@ -160,6 +171,24 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             var binding = Find(controller);
             if (binding != null)
                 ReleaseAndLog(binding);
+        }
+
+        /// <summary>
+        /// Resolves the business View paired with a bound controller. Used by
+        /// <see cref="UI.UnityUIAdapter"/> to build a <see cref="ObFramework.Integrated.UI.UIViewInstance"/>
+        /// from the object the generated binding already constructed; it never creates a second View.
+        /// </summary>
+        public bool TryGetView(MonoBehaviour controller, out object view)
+        {
+            var binding = controller ? Find(controller) : null;
+            if (binding?.View is { } bound)
+            {
+                view = bound;
+                return true;
+            }
+
+            view = null!;
+            return false;
         }
 
         public void DeferTick(ViewBinding binding) => _deferredTicks.Add(binding);

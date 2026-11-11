@@ -22,6 +22,12 @@ namespace ObFramework.Adapter.Unity.ViewBinding
         public int Id { get; }
         public string Description { get; }
 
+        /// <summary>
+        /// The business View constructed by the generated binding, or null before initialization /
+        /// after release. The adapter resolves the paired View through this single owner.
+        /// </summary>
+        public object? View => _view;
+
         public ViewBinding(UnityViewBindings owner, MonoBehaviour controller, string description)
         {
             _owner = owner;

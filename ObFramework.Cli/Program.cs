@@ -1,4 +1,6 @@
-﻿using ObFramework.Cli.Core;
+using ObFramework.Cli.Config;
+using ObFramework.Cli.Core;
+using ObFramework.Cli.Deployment;
 using System.Text;
 
 namespace ObFramework.Cli
@@ -9,6 +11,11 @@ namespace ObFramework.Cli
         {
             var cli = new CliModule();
             cli.Initialize();
+
+            // Package contributed commands use the existing extension point; CliModule itself is
+            // not modified and never scans assemblies.
+            ConfigCliModule.Register(cli);
+            UnityDeployCliModule.Register(cli);
 
             // 非交互模式：直接执行后退出
             if (args.Length > 0)

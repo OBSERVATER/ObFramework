@@ -1,45 +1,41 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
 
 namespace ObFramework.Integrated.UI
 {
-    internal readonly struct UIKey : IEquatable<UIKey>
+    /// <summary>Managed window entry: the business View type plus the associated VC/View pair.</summary>
+    internal readonly struct UIKey
     {
-        public Type Type { get; }
-        public EUIOpenMode Mode { get; }
-        public IUIWindow Instance { get; }
+        public Type ViewType { get; }
+        public UIViewInstance Instance { get; }
         public int SerialId { get; }
-        public bool IsInstanceKey => Instance != null;
-        public IUIData Data { get; }
-        public UIKey(Type type, IUIWindow instance, int serial, EUIOpenMode mode, IUIData? data)
+        public EUIOpenMode Mode { get; }
+        public IUIData? Data { get; }
+
+        public UIKey(Type viewType, UIViewInstance instance, int serialId, EUIOpenMode mode, IUIData? data)
         {
-            Type = type;
+            ViewType = viewType;
             Instance = instance;
-            SerialId = serial;
+            SerialId = serialId;
             Mode = mode;
             Data = data;
         }
 
         public bool Equals(UIKey other)
         {
-            return other.Type == Type && ReferenceEquals(other.Instance,Instance) && other.SerialId == SerialId;
+            return other.ViewType == ViewType && other.SerialId == SerialId;
         }
-        public override bool Equals(object obj)
-        {
-            if (obj is not UIKey key)
-            {
-                return false;
-            }
-            return Equals(key);
-        }
+
+        public override bool Equals(object obj) => obj is UIKey key && Equals(key);
+
         public override int GetHashCode()
         {
-            var a = Type?.GetHashCode() ?? 0;
-            var b = RuntimeHelpers.GetHashCode(Instance);
-            var c = SerialId.GetHashCode();
-            return HashCode.Combine(a, b, c);
+            unchecked
+            {
+                return ((ViewType != null ? ViewType.GetHashCode() : 0) * 397) ^ SerialId;
+            }
         }
-        public static bool operator ==(UIKey a, UIKey b) => a.Equals(b);
-        public static bool operator !=(UIKey a, UIKey b) => !a.Equals(b);
+
+        public static bool operator ==(UIKey left, UIKey right) => left.Equals(right);
+        public static bool operator !=(UIKey left, UIKey right) => !left.Equals(right);
     }
 }

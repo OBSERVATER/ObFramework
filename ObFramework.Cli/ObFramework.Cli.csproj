@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,6 +16,29 @@
   </ItemGroup>
     <ItemGroup>
 		<EmbeddedResource Include="Templates\*.tpl" LogicalName="%(Filename)%(Extension)" />
+
+		<!-- Deployment plan for `ob unity deploy`: data only, no payload duplication. The plan is
+		     auto-mapping based (targetRoot + resource relative path), so the Editor resource set may
+		     change without code changes. -->
+		<EmbeddedResource Include="Resources\UnityDeployPlan\deploy-manifest.json"
+						  LogicalName="ObFramework.Cli.UnityDeployPlan/deploy-manifest.json" />
+
+		<!-- Unity Editor deployable payload: authored once under the Unity Adapter project and
+		     adopted here at build time (Lead decision: do not duplicate the payload in ObFramework.Cli).
+		     Embedding keeps `ob unity deploy` working from an installed NuGet dotnet tool: a tool
+		     package only guarantees the tool assembly + its dependencies on disk after restore, so a
+		     DLL-embedded resource is more reliable than a package content folder. The payload now also
+		     ships as contentFiles (below) for inspection; the deployer reads the embedded copy.
+		     WithCulture="false" is REQUIRED: MSBuild infers a culture from file names such as
+		     `Foo.cs.meta` ("cs" = Czech) and would move those resources into a satellite assembly,
+		     silently dropping every `*.cs.meta` file from the deployable payload. -->
+		<EmbeddedResource Include="..\ObFramework.Adapter.Unity\EditorDeploy\**\*"
+						  LogicalName="ObFramework.Cli.UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)"
+						  WithCulture="false" />
+		<None Include="..\ObFramework.Adapter.Unity\EditorDeploy\**\*"
+			  Pack="true"
+			  WithCulture="false"
+			  PackagePath="contentFiles/any/any/UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
     <ItemGroup>
       <PackageReference Include="Spectre.Console.Cli" Version="0.57.2" />

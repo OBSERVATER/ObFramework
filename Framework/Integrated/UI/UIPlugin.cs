@@ -7,6 +7,10 @@ using ObFramework.Integrated.Resource;
 
 namespace ObFramework.Integrated.UI
 {
+    /// <summary>
+    /// UI plugin facade. Every public operation is expressed in business View types; engine VC and
+    /// adapter details stay behind <see cref="IUIAdapter"/>.
+    /// </summary>
     public sealed class UIPlugin : IPlugin
     {
         private IUIAdapter? _adapter;
@@ -16,6 +20,7 @@ namespace ObFramework.Integrated.UI
         private readonly int _cacheCapacity;
         private UIManager? _manager;
         private UIManager Manager => _manager ?? throw new ObjectDisposedException(nameof(UIPlugin), "UI plugin is not running.");
+
         public UIPlugin(IUIAdapter adapter, int cacheCapacity = 10, Func<IUIAdapter, CancellationToken, Task>? initialize = null, Func<IUIAdapter, Task>? shutdown = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
@@ -23,6 +28,7 @@ namespace ObFramework.Integrated.UI
             _initialize = initialize;
             _shutdown = shutdown;
         }
+
         public UIPlugin(Func<ResourcePlugin, IUIAdapter> createAdapter, int cacheCapacity = 10, Func<IUIAdapter, CancellationToken, Task>? initialize = null, Func<IUIAdapter, Task>? shutdown = null)
         {
             _createAdapter = createAdapter ?? throw new ArgumentNullException(nameof(createAdapter));
@@ -31,20 +37,21 @@ namespace ObFramework.Integrated.UI
             _shutdown = shutdown;
         }
 
-        public Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : class, IUIWindow
+        public Task<T?> OpenAsync<T>(EUIOpenMode mode = EUIOpenMode.Single, IUIData? data = null, CancellationToken cancellationToken = default) where T : AUIView
             => Manager.OpenAsync<T>(mode, data, cancellationToken);
-        public bool TryGet<T>(out T? instance) where T : class, IUIWindow => Manager.TryGet(out instance);
-        public bool Close(IUIWindow? instance) => Manager.Close(instance);
-        public bool Close<T>() where T : class, IUIWindow => Manager.Close<T>();
-        public int CloseAll<T>() where T : class, IUIWindow => Manager.CloseAll<T>();
-        public void Push<T>(T ui) where T : IUIWindow => Manager.Push(ui);
-        public Task<T?> Pop<T>() where T : class, IUIWindow => Manager.Pop<T>();
+        public bool TryGet<T>(out T? view) where T : AUIView => Manager.TryGet(out view);
+        public bool Close(AUIView? view) => Manager.Close(view);
+        public bool Close<T>() where T : AUIView => Manager.Close<T>();
+        public int CloseAll<T>() where T : AUIView => Manager.CloseAll<T>();
+        public void Push<T>(T view) where T : AUIView => Manager.Push(view);
+        public Task<T?> Pop<T>() where T : AUIView => Manager.Pop<T>();
 
         void IPlugin.Register(PluginRegistration registration)
         {
             if (_createAdapter != null)
                 registration.Require<ResourcePlugin>();
         }
+
         async Task IPlugin.InitAsync(IPluginContext plugins, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -55,6 +62,7 @@ namespace ObFramework.Integrated.UI
                 await _initialize(_adapter!, ct);
             ct.ThrowIfCancellationRequested();
         }
+
         async Task IPlugin.StopAsync(IPluginContext plugins)
         {
             var errors = new List<Exception>();
