@@ -87,8 +87,16 @@ public static class GeneratedUIRegistry
 }
 ```
 
-- 资源 Key 规则：单 View 覆盖 > `resourceKeyOverrides` > `resourceKeyFormat`（默认 `UI/{view}`，
-  `{view}` 是 View 名去掉 `View` 后缀）。以文件系统 Root 路径作为资源地址的行为被明确禁止。
+- 资源 Key 规则：单 View 覆盖 > `resourceKeyOverrides` > `resourceKeyFormat`（默认 `UI/{view}`；
+  `{view}` 替换为 **View 类型名**，例如 `ShopView` → `UI/ShopView`，不自动去掉 `View` 后缀）。
+  以文件系统 Root 路径作为资源地址的行为被明确禁止。
+- Prefab 约定：注册校验按 `<uiAssetRoot>/<ViewName>.prefab` 查找 Prefab（例如
+  `Assets/ObFramework/UI/ShopView.prefab`），缺失时给出 warning（不阻断纯生成）。
+- 绑定表当前按 Prefab 路径持久化组件定位信息（名称/类型/路径），在生成时解析为实际组件引用并写入
+  序列化字段；不采用运行时反射表。真实 Unity 下把绑定表改为 Prefab 内序列化对象（ScriptableObject/
+  Component）属于示例项目阶段验证/演进项。
+- 生成时选择 Architecture、Level、输出目录；单 View 的资源 Key 覆盖可在 setup.json
+  `resourceKeyOverrides` 中按 View 名配置（T16 注册代码生成时生效）。
 - 重复 View 映射报错；重复资源 Key 给出警告。
 - 生成前需保证 View/VC 脚本已编译（注册扫描基于 `TypeCache` 的 `[BindView]`）。
 - 输出命名空间/类名/方法名/Adapter 类型/输出路径均可配置。

@@ -62,11 +62,14 @@ public sealed class BuyCommand : AUIAsyncCommand
 | 方法形态 | 生成 |
 |---|---|
 | `void M()` | `MCommand : AUICommand`，ctor `(View)` |
-| `void M(T value)` | `MCommand : AUICommand`，ctor `(View)` / `(View, T)`，`Parameter` 为装箱值 |
-| `Task M()` / `ValueTask M()` | `MCommand : AUIAsyncCommand` |
-| `Task M(T value)` / `ValueTask M(T value)` | 同上，带参数 |
-| `Task M(CancellationToken ct)` | `MCommand : AUIAsyncCommand`（token 透传） |
-| `Task M(T value, CancellationToken ct)` | `MCommand`（值 + token） |
+| `void M(T value)` | `MCommand : AUICommand`，ctor `(View, T)`，`Parameter` 为装箱值 |
+| `Task M()` / `ValueTask M()` | `MCommand : AUIAsyncCommand`，ctor `(View)` |
+| `Task M(T value)` / `ValueTask M(T value)` | 同上，带参数，ctor `(View, T)` |
+| `Task M(CancellationToken ct)` | `MCommand : AUIAsyncCommand`（token 透传），ctor `(View)` |
+| `Task M(T value, CancellationToken ct)` | `MCommand`（值 + token），ctor `(View, T)` |
+
+即：**有事件值参数的命令只有 `(View, T)` 构造函数，无值命令只有 `(View)` 构造函数**；引擎事件处理器
+按当前事件值直接构造，不使用反射。
 
 - 方法名以 `Async` 结尾时命令名去掉后缀：`BuyAsync` → `BuyCommand`。
 - `CanExecute = nameof(Method)`：方法零参或一个与事件值匹配的参数；执行时再次检查。

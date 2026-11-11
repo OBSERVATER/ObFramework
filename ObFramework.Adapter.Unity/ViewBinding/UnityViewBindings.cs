@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core;
 using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
@@ -32,9 +33,27 @@ namespace ObFramework.Adapter.Unity.ViewBinding
                 throw new InvalidOperationException("Another OBF Unity view binding runtime is active.");
 
             _stopping = stopping;
+            ConfigureMainThreadDispatch();
             SceneManager.sceneLoaded += OnSceneLoaded;
             SceneManager.sceneUnloaded += OnSceneUnloaded;
             Current = this;
+        }
+
+        /// <summary>
+        /// Generated bindings may be notified from background threads; marshal those updates through
+        /// Unity's main-thread synchronization context captured here (constructed on the main thread).
+        /// </summary>
+        private static void ConfigureMainThreadDispatch()
+        {
+            var mainThreadId = Thread.CurrentThread.ManagedThreadId;
+            var mainThread = SynchronizationContext.Current;
+            UIBindingDispatch.ConfigureMainThread(mainThreadId, action =>
+            {
+                if (mainThread != null)
+                    mainThread.Post(_ => action(), null);
+                else
+                    action();
+            });
         }
 
         public void Prepare(IArchitecture architecture) => _architecture = architecture;

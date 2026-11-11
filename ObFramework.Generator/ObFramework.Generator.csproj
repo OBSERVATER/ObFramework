@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
@@ -7,7 +7,10 @@
 		<IsRoslynComponent>true</IsRoslynComponent>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all" />
+		<!-- Unity 2022.3 ships Roslyn 4.3.1. Both the Save generator and the CDE generator are
+		     compiled against that baseline so the same assemblies load inside the Unity Editor
+		     (IIncrementalGenerator / ForAttributeWithMetadataName are available from 4.3). -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
 	</ItemGroup>
 
 </Project>

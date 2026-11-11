@@ -341,19 +341,19 @@ public class CDEGeneratorTests
                 [RelayCommand(AllowConcurrentExecutions = true)]
                 private async Task ParallelAsync(CancellationToken ct)
                 {
-                    Entered++;
+                    Interlocked.Increment(ref Entered);
                     Started.TrySetResult(true);
                     await Gate.Task.WaitAsync(ct).ConfigureAwait(false);
-                    Completed++;
+                    Interlocked.Increment(ref Completed);
                 }
 
                 [RelayCommand(CancelOnClose = false)]
                 private async ValueTask DurableAsync()
                 {
-                    Entered++;
+                    Interlocked.Increment(ref Entered);
                     Started.TrySetResult(true);
                     await Gate.Task.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-                    Completed++;
+                    Interlocked.Increment(ref Completed);
                 }
 
                 [RelayCommand(CanExecute = nameof(CanAccept))]
@@ -361,7 +361,7 @@ public class CDEGeneratorTests
                 {
                     LastValue = value;
                     await Task.Yield();
-                    Completed++;
+                    Interlocked.Increment(ref Completed);
                     _ = ct;
                 }
 

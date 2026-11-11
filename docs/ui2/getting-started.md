@@ -42,15 +42,20 @@ Unity Adapter 通过 NuGet 包分发。安装包后，把 Editor 工具部署进
 ob unity deploy D:/GameProjects/MyGame
 ```
 
-它会把 Editor-only 脚本、`.asmdef/.meta`、Roslyn 生成器资源安装到
-`Assets/ObFramework/Editor/**`，并记录在 `Assets/ObFramework/obf-deploy.json`。
-升级时重新执行 `deploy`，卸载时执行 `ob unity remove`（不会删除你的脚本/Prefab/setup.json）。
+它会把 Editor-only 脚本、`.asmdef/.meta` 安装到 `Assets/ObFramework/Editor/**`，并记录在
+`Assets/ObFramework/obf-deploy.json`。升级时重新执行 `deploy`，卸载时执行 `ob unity remove`
+（不会删除你的脚本/Prefab/setup.json）。
+
+> 本阶段 `ob unity deploy` 部署的是 Editor 工具源码与 asmdef/meta；Unity 的 Roslyn Source Generator
+> DLL 仍以 NuGet `analyzers/dotnet/cs` 资源分发，把它导入 Unity `Assets` 并打 `RoslynAnalyzer`
+> 标签属于示例项目阶段的安装工作（见 [verification.md](verification.md)）。
 
 ## 3. 制作 Prefab
 
-在 `Assets/ObFramework/UI/` 下创建 UI Prefab（例如 `ShopWindow.prefab`），根节点挂载窗口控制器。
-根节点的资源 Key 由 `resourceKeyFormat` 决定（默认 `UI/{view}`，View 名去掉 `View` 后缀，例如
-`ShopView` → `UI/Shop`）。
+在 `Assets/ObFramework/UI/` 下创建 UI Prefab（命名约定 `<ViewName>.prefab`，例如 `ShopView.prefab`），
+根节点挂载窗口控制器。根节点的资源 Key 由 `resourceKeyFormat` 决定（默认 `UI/{view}`，其中 `{view}`
+是 View 类型名，例如 `ShopView` → `UI/ShopView`）；需要特殊 Key 时在 setup.json
+`resourceKeyOverrides` 中为单个 View 配置。
 
 ## 4. 生成可编辑的 View 与 VC
 
@@ -139,14 +144,14 @@ public static class ObfUIRegistry
 {
     public static void RegisterAll(UnityUIAdapter adapter)
     {
-        adapter.Register<ShopView, ShopWindow>("UI/Shop");
+        adapter.Register<ShopView, ShopWindow>("UI/ShopView");
     }
 }
 
 // 启动（例如 AGameLauncher / GameLauncher 的初始化阶段）
 var registry = new UIViewRegistry();
 var adapter = new UnityUIAdapter(resources, registry) { Root = uiRoot };
-adapter.Register<ShopView, ShopWindow>("UI/Shop");   // 或 ObfUIRegistry.RegisterAll(adapter)
+adapter.Register<ShopView, ShopWindow>("UI/ShopView");   // 或 ObfUIRegistry.RegisterAll(adapter)
 var ui = new UIPlugin(adapter);
 ```
 

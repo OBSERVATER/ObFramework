@@ -98,6 +98,10 @@ Architecture、`IViewEnabled/IViewDisabled` 供原生启用/禁用回调、`IDis
 
 两者都是「按名过滤」的显式订阅，运行期不做属性反射。
 
+后台线程触发的属性/命令状态通知由绑定层通过 `UIBindingDispatch`（Framework 提供的主线程投递
+seam）投递回主线程再更新原生控件；Unity 绑定运行期在启动时配置主线程与 Unity
+`SynchronizationContext`。业务 View 本身不被框架全局线程安全化。
+
 ## 跨引擎边界
 
 - `Framework` 不引用任何引擎类型；`UIPlugin` 不暴露 VC 类型。

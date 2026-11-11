@@ -172,6 +172,18 @@ namespace ObFramework.Cli.Deployment
                     continue;
                 }
 
+                // Only delete content this deployer actually wrote: a user-modified owned file is left
+                // in place (and keeps its ownership record) exactly like Remove does.
+                var staleHash = DeploymentHash.ComputeSha256(File.ReadAllBytes(staleFullPath));
+                if (!string.Equals(staleHash, stale.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    var detail = "modified after deployment; left in place (not owned content anymore)";
+                    warnings.Add($"'{stale.Path}' was {detail}; it is no longer part of the deployment plan.");
+                    changes.Add(new DeploymentFileChange(stale.Path, DeploymentChangeKind.Skipped, detail));
+                    deployedFiles.Add(stale);
+                    continue;
+                }
+
                 if (!dryRun)
                 {
                     File.Delete(staleFullPath);

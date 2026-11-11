@@ -141,7 +141,7 @@ public class ViewBindingGeneratorTest
             new[] { CSharpSyntaxTree.ParseText(AdapterSurface, parseOptions), CSharpSyntaxTree.ParseText(source, parseOptions) },
             references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-        CSharpGeneratorDriver.Create(new[] { new ViewBindingGenerator() }, parseOptions: parseOptions)
+        CSharpGeneratorDriver.Create(new[] { new ViewBindingGenerator().AsSourceGenerator() }, parseOptions: parseOptions)
             .RunGeneratorsAndUpdateCompilation(compilation, out var result, out var errors);
         diagnostics = errors;
         return result;

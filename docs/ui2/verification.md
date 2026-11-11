@@ -9,7 +9,7 @@
 |---|---|
 | `Framework/ObFramework.sln` 全量构建 | ✅ 0 errors（仅既有 warning：离线 NuGet NU1900、Godot/Immutable 版本提示） |
 | 10 个项目单独构建（含 Editor.Core、Adapter.Unity.Editor） | ✅ 全部 0 errors |
-| 纯 .NET 测试（反射 NUnit runner） | ✅ **298 / 298 通过** |
+| 纯 .NET 测试（反射 NUnit runner） | ✅ **302 / 302 通过** |
 | CLI 帮助命令 | ✅ `ob config --help`、`ob unity --help` 可用 |
 | T17 部署 dry-run（真实 EditorDeploy payload） | ✅ 45/45 文件规划，重复部署稳定，remove 只删自有文件 |
 
@@ -42,9 +42,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.
 
 - **Unity 2022.3 / C# 9**：生成器与 Editor.Core 输出 C# 9 兼容代码；Editor glue 与 Adapter.Unity
   以本机 Unity 2022.3.58.f1 的 UnityEngine/UnityEditor DLL 静态编译通过。
-- **Roslyn**：引擎无关生成器使用 `Microsoft.CodeAnalysis 5.9`（incremental generator），Unity
-  生成器保持 `3.8` API 以兼容 Unity 2022.3 自带编译器；测试在同一 Driver 中同时运行两个生成器并
-  最终编译通过（不依赖对方本轮生成的符号）。
+- **Roslyn 基线**：两个生成器（`ObFramework.Generator`、`ObFramework.Generator.Unity`）统一编译
+  针对 `Microsoft.CodeAnalysis 4.3.1`（Unity 2022.3 自带 Roslyn 基线），均使用
+  `IIncrementalGenerator`；测试在 `.NET 8` 下用 5.9 driver 驱动这两个 4.3.1 程序集并最终编译通过。
+- **主线程投递**：`UIBindingDispatch` 由 Unity 绑定运行期在构造时配置主线程 + Unity
+  `SynchronizationContext`；生成的属性/命令状态处理器在后台线程触发时先投递回主线程再更新控件
+  （`ObFramework.Test/Core/UI/UIBindingDispatchTest` 覆盖投递语义）。
 - **第三方目录**：`Framework/ThirdParty` 未改动。
 - **既有能力保留**：Core Architecture、IController/ICan*、ACommand/AAsyncCommand、UIPlugin/UIManager、
   ResourcePlugin、ViewBinding、LRU、UIStack 均沿用/扩展，没有新增平行管理器。
@@ -53,6 +56,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.
   View 语义并保持行为覆盖。
 - **Godot 构建适配**：`ObFramework.Adapter.Godot` 由 netstandard2.1 调整为 net8.0，以匹配本机
   GodotSharp 4.7.2；业务契约不变（详见 adapter-integration.md）。
+
+## 代码审查后的修正（本轮）
+
+- 生成器统一到 `IIncrementalGenerator` + Roslyn 4.3.1 基线（符合仓库 `SourceGenerator.md` 与
+  Unity 2022.3 兼容要求）。
+- 新增 `UIBindingDispatch` 主线程投递 seam：Unity 绑定运行期配置主线程与 SynchronizationContext，
+  生成的显示/命令状态处理器自动把后台通知投递回主线程。
+- Unity Adapter 创建实例时强制 clone 为非激活后再挂到激活层级根节点，确保 `Awake/OnEnable` 与
+  生成的显示绑定不会在 `UIManager.InitView/OpenView` 之前触发。
+- CLI 部署升级时对「已拥有但被用户修改」的过期文件改为保留 + 警告（与 remove 的 SHA-256 所有权
+  规则一致），不再无条件删除。
+- 文档与实现对齐：`{view}` 使用 View 类型名、Prefab 约定 `<ViewName>.prefab`、命令构造函数形态。
 
 ## 明确未验证（留待示例项目阶段）
 
@@ -63,12 +78,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.
 2. Godot：PackedScene 真实加载/层级/`QueueFree`、`_Ready` 与 Architecture 解析时序。
 3. UnrealSharp：UUserWidget 异步类加载、`ConfigureWithUnrealContext` 线程行为、
    `TStrongObjectPtr` 与 Canvas 层级。
-4. 生成代码与真实引擎控件的联合编译/运行（本阶段以 stub 编译面 + 纯 .NET 执行为准）。
-5. NuGet 部署后的 Unity 工程内实际导入结果（本阶段只验证文件部署规划与幂等/所有权语义）。
+4. 生成代码与真实引擎控件的联合编译/运行（本阶段以 stub 编译面 + 纯 .NET 执行为准；后台通知的
+   主线程投递语义在框架 seam 层测试，Unity 真实 SynchronizationContext 行为待实机验证）。
+5. NuGet 部署后的 Unity 工程内实际导入结果（本阶段只验证文件部署规划、幂等与所有权语义）。
+6. Editor 绑定表目前以 Prefab 路径持久化组件定位信息并在生成时解析；改为 Prefab 内序列化引用
+   对象属于示例项目阶段演进项。
 
 ## 已知后续项
 
 - `ob config` / `ob unity deploy` 需要重新构建 CLI 才能反映 EditorDeploy payload 变化（构建期 glob）。
 - Analyzer DLL（`ObFramework.Generator.Unity.dll`）以 NuGet `analyzers/dotnet/cs` 分发；把该 DLL
-  自动复制进 Unity `Assets` 并生成 `RoslynAnalyzer` 标签属于示例项目阶段工作（EditorDeploy 不含 DLL）。
+  自动部署进 Unity `Assets` 并生成 `RoslynAnalyzer` 标签属于示例项目阶段安装工作（部署器已支持
+  `.dll` → roslyn-analyzer 的文件类型映射与计划扩展）。
 - 非 Unity 引擎的 Editor 生成工具不在首阶段范围。

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -10,7 +11,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace ObFramework.Generator.Unity
 {
     [Generator]
-    public sealed class ViewBindingGenerator : ISourceGenerator
+    public sealed class ViewBindingGenerator : IIncrementalGenerator
     {
         private const string BindingNamespace = "ObFramework.Adapter.Unity.ViewBinding";
         private const string CoreNamespace = "ObFramework.Core.";
@@ -21,26 +22,50 @@ namespace ObFramework.Generator.Unity
         private static readonly DiagnosticDescriptor InvalidParameter = Error("OBFV004", "Unsupported view constructor parameter");
         private static readonly DiagnosticDescriptor ReservedCallback = Error("OBFV005", "Reserved Unity callback");
 
-        public void Initialize(GeneratorInitializationContext context) =>
-            context.RegisterForSyntaxNotifications(() => new Candidates());
-
-        public void Execute(GeneratorExecutionContext context)
+        public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            if (!(context.SyntaxReceiver is Candidates candidates))
-                return;
+            // Only classes that actually declare attributes are candidates for [BindView]; the
+            // interface generator then validates [UIBindData]/[UIBindCommand] declarations on types
+            // that carry attributed members. Both providers are syntax-guided and cacheable.
+            var controllers = context.SyntaxProvider.CreateSyntaxProvider(
+                    static (node, _) => node is ClassDeclarationSyntax declaration && declaration.AttributeLists.Count > 0,
+                    static (syntaxContext, _) =>
+                        syntaxContext.SemanticModel.GetDeclaredSymbol(syntaxContext.Node) as INamedTypeSymbol)
+                .Where(static symbol => symbol != null)
+                .Collect();
 
-            var attribute = context.Compilation.GetTypeByMetadataName(BindingNamespace + ".BindViewAttribute");
+            var typesWithAttributedMembers = context.SyntaxProvider.CreateSyntaxProvider(
+                    static (node, _) => node is MemberDeclarationSyntax member &&
+                                        member.AttributeLists.Count > 0 &&
+                                        member.Parent is TypeDeclarationSyntax,
+                    static (syntaxContext, _) =>
+                        syntaxContext.SemanticModel.GetDeclaredSymbol(syntaxContext.Node.Parent!) as INamedTypeSymbol)
+                .Where(static symbol => symbol != null)
+                .Collect();
+
+            var combined = controllers.Combine(typesWithAttributedMembers).Combine(context.CompilationProvider);
+            context.RegisterSourceOutput(combined, static (output, value) =>
+            {
+                var declarations = value.Item1.Item1;
+                var attributedTypes = value.Item1.Item2;
+                Run(output, value.Item2, declarations, attributedTypes);
+            });
+        }
+
+        private static void Run(SourceProductionContext output, Compilation compilation,
+            ImmutableArray<INamedTypeSymbol?> declarations, ImmutableArray<INamedTypeSymbol?> attributedTypes)
+        {
+            var attribute = compilation.GetTypeByMetadataName(BindingNamespace + ".BindViewAttribute");
             if (attribute == null)
                 return;
 
-            var surface = UIBindingSurface.Resolve(context.Compilation);
+            var context = new GenerationContext(output, compilation);
+            var surface = UIBindingSurface.Resolve(compilation);
             var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var controllers = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            foreach (var declaration in candidates.Classes)
+            foreach (var controller in declarations)
             {
-                var model = context.Compilation.GetSemanticModel(declaration.SyntaxTree);
-                if (!(model.GetDeclaredSymbol(declaration, context.CancellationToken) is INamedTypeSymbol controller) ||
-                    !seen.Add(controller))
+                if (controller == null || !seen.Add(controller))
                     continue;
 
                 var binding = controller.GetAttributes().FirstOrDefault(item => Same(item.AttributeClass, attribute));
@@ -51,11 +76,19 @@ namespace ObFramework.Generator.Unity
                 }
             }
 
-            if (surface.Available)
-                ReportMissingBindView(context, candidates, attribute, controllers);
+            if (!surface.Available)
+                return;
+
+            var candidateTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var type in attributedTypes)
+            {
+                if (type != null)
+                    candidateTypes.Add(type);
+            }
+            ReportMissingBindView(context, candidateTypes, attribute, controllers);
         }
 
-        private static void Generate(GeneratorExecutionContext context, INamedTypeSymbol controller, AttributeData binding,
+        private static void Generate(GenerationContext context, INamedTypeSymbol controller, AttributeData binding,
             UIBindingSurface surface)
         {
             var compilation = context.Compilation;
@@ -191,7 +224,7 @@ namespace ObFramework.Generator.Unity
             return false;
         }
 
-        private static void Emit(GeneratorExecutionContext context, INamedTypeSymbol controller, INamedTypeSymbol view,
+        private static void Emit(GenerationContext context, INamedTypeSymbol controller, INamedTypeSymbol view,
             List<string> arguments, bool uiBindings)
         {
             var source = new StringBuilder("// <auto-generated/>\n");
@@ -253,62 +286,42 @@ namespace ObFramework.Generator.Unity
             context.AddSource(controller.ToDisplayString() + ".ViewBinding.g.cs", SourceText.From(source.ToString(), Encoding.UTF8));
         }
 
-        private static void ReportMissingBindView(GeneratorExecutionContext context, Candidates candidates,
+        private static void ReportMissingBindView(GenerationContext context, IEnumerable<INamedTypeSymbol> candidateTypes,
             INamedTypeSymbol bindViewAttribute, HashSet<INamedTypeSymbol> controllers)
         {
-            var locations = new Dictionary<INamedTypeSymbol, Location>(SymbolEqualityComparer.Default);
-            foreach (var declaration in candidates.Types)
+            var dataAttributes = new[]
             {
-                if (!(declaration is ClassDeclarationSyntax))
-                    continue;
-                var location = FindBindingFieldLocation(declaration);
-                if (location == null)
-                    continue;
-                var model = context.Compilation.GetSemanticModel(declaration.SyntaxTree);
-                if (!(model.GetDeclaredSymbol(declaration, context.CancellationToken) is INamedTypeSymbol type))
-                    continue;
-                if (!locations.ContainsKey(type))
-                    locations.Add(type, location);
-            }
+                BindingNamespace + ".UIBindDataAttribute",
+                BindingNamespace + ".UIBindCommandAttribute"
+            };
 
-            foreach (var pair in locations)
+            foreach (var type in candidateTypes.OrderBy(static item => item.ToDisplayString(), StringComparer.Ordinal))
             {
-                var type = pair.Key;
                 if (controllers.Contains(type) ||
                     type.GetAttributes().Any(item => Same(item.AttributeClass, bindViewAttribute)))
                     continue;
-                context.ReportDiagnostic(Diagnostic.Create(UIBindingDiagnostics.MissingBindView, pair.Value,
+
+                Location? location = null;
+                foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
+                {
+                    var dataAttribute = field.GetAttributes().FirstOrDefault(attribute =>
+                        attribute.AttributeClass != null &&
+                        dataAttributes.Contains(attribute.AttributeClass.ToDisplayString(), StringComparer.Ordinal));
+                    if (dataAttribute == null)
+                        continue;
+
+                    location = dataAttribute.ApplicationSyntaxReference?
+                        .GetSyntax(context.CancellationToken)
+                        .GetLocation();
+                    break;
+                }
+
+                if (location == null)
+                    continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(UIBindingDiagnostics.MissingBindView, location,
                     $"'{type}' declares [UIBindData]/[UIBindCommand] fields but has no [BindView(typeof(View), typeof(Contract))] attribute, so no engine binding is generated."));
             }
-        }
-
-        private static Location? FindBindingFieldLocation(TypeDeclarationSyntax declaration)
-        {
-            foreach (var member in declaration.Members)
-            {
-                if (!(member is FieldDeclarationSyntax field))
-                    continue;
-                foreach (var list in field.AttributeLists)
-                {
-                    foreach (var attribute in list.Attributes)
-                    {
-                        var name = AttributeSimpleName(attribute.Name);
-                        if (name == "UIBindData" || name == "UIBindDataAttribute" ||
-                            name == "UIBindCommand" || name == "UIBindCommandAttribute")
-                            return attribute.GetLocation();
-                    }
-                }
-            }
-            return null;
-        }
-
-        private static string AttributeSimpleName(NameSyntax name)
-        {
-            if (name is QualifiedNameSyntax qualified)
-                return AttributeSimpleName(qualified.Right);
-            if (name is AliasQualifiedNameSyntax alias)
-                return AttributeSimpleName(alias.Name);
-            return name is IdentifierNameSyntax identifier ? identifier.Identifier.Text : name.ToString();
         }
 
         private static bool Same(ISymbol? left, ISymbol? right) =>
@@ -320,22 +333,7 @@ namespace ObFramework.Generator.Unity
         private static DiagnosticDescriptor Error(string id, string title) =>
             new(id, title, "{0}", "ViewBinding", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-        private static void Report(GeneratorExecutionContext context, DiagnosticDescriptor descriptor, Location? location, string message) =>
+        private static void Report(GenerationContext context, DiagnosticDescriptor descriptor, Location? location, string message) =>
             context.ReportDiagnostic(Diagnostic.Create(descriptor, location, message));
-
-        private sealed class Candidates : ISyntaxReceiver
-        {
-            public List<TypeDeclarationSyntax> Classes { get; } = new();
-            public List<TypeDeclarationSyntax> Types { get; } = new();
-
-            public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
-            {
-                if (!(syntaxNode is TypeDeclarationSyntax declaration))
-                    return;
-                Types.Add(declaration);
-                if (declaration.AttributeLists.Count > 0)
-                    Classes.Add(declaration);
-            }
-        }
     }
 }

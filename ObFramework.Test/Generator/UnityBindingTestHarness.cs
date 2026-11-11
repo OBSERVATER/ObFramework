@@ -303,7 +303,7 @@ internal static class UnityBindingTestHarness
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             new ISourceGenerator[]
             {
-                new ViewBindingGenerator(),
+                new ViewBindingGenerator().AsSourceGenerator(),
                 new CdeGenerator().AsSourceGenerator(),
             },
             parseOptions: parseOptions);

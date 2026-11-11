@@ -22,7 +22,7 @@ namespace ObFramework.Generator.Unity
         private const string Indent4 = Indent3 + "    ";
         private const string BindingNamespace = "global::ObFramework.Adapter.Unity.ViewBinding";
 
-        public static void Emit(GeneratorExecutionContext context, UIBindingPlan plan)
+        public static void Emit(GenerationContext context, UIBindingPlan plan)
         {
             var source = Build(plan);
             var hint = plan.Controller.ToDisplayString() + ".UIBinding.g.cs";
@@ -263,6 +263,7 @@ namespace ObFramework.Generator.Unity
 
             sb.Append(Indent2).AppendLine("private void __OnViewPropertyChanged(string __propertyName)");
             sb.Append(Indent2).AppendLine("{");
+            EmitMainThreadGuard(sb, "__OnViewPropertyChanged(__propertyName)");
             sb.Append(Indent3).AppendLine("switch (__propertyName)");
             sb.Append(Indent3).AppendLine("{");
             foreach (var name in order)
@@ -275,6 +276,20 @@ namespace ObFramework.Generator.Unity
             sb.Append(Indent3).AppendLine("}");
             sb.Append(Indent2).AppendLine("}");
             sb.AppendLine();
+        }
+
+        /// <summary>
+        /// Generated display handlers can be raised from background threads; marshal the update onto
+        /// the engine main thread through the framework dispatch seam before touching native controls.
+        /// </summary>
+        private static void EmitMainThreadGuard(StringBuilder sb, string repostCall)
+        {
+            sb.Append(Indent3).AppendLine("if (!global::ObFramework.Integrated.UI.UIBindingDispatch.IsMainThread)");
+            sb.Append(Indent3).AppendLine("{");
+            sb.Append(Indent4).Append("global::ObFramework.Integrated.UI.UIBindingDispatch.Post(() => ")
+                .Append(repostCall).AppendLine(");");
+            sb.Append(Indent3).AppendLine("    return;");
+            sb.Append(Indent3).AppendLine("}");
         }
 
         private static void EmitCommandStateChangedHandler(StringBuilder sb, UIBindingPlan plan)
@@ -295,6 +310,7 @@ namespace ObFramework.Generator.Unity
 
             sb.Append(Indent2).AppendLine("private void __OnViewCommandStateChanged(string __commandName)");
             sb.Append(Indent2).AppendLine("{");
+            EmitMainThreadGuard(sb, "__OnViewCommandStateChanged(__commandName)");
             if (filtered.Count == 0)
             {
                 foreach (var binding in anyCommand)

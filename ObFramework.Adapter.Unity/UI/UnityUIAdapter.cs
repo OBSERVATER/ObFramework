@@ -101,7 +101,11 @@ namespace ObFramework.Adapter.Unity.UI
                         "business View. The controller must be a generated [BindView] partial MonoBehaviour and the OBF view binding runtime " +
                         "must be initialized before creating views.");
 
-                // Place the still-inactive instance under its level root; Open only activates it.
+                // Force the clone inactive before reparenting: a prefab root whose activeSelf is true
+                // would otherwise become active in the hierarchy under the active level root and fire
+                // Awake/OnEnable (and therefore the generated display bindings) before UIManager runs
+                // OnInit/OnOpen. Open is the only place that activates the native object.
+                clone.SetActive(false);
                 clone.transform.SetParent(GetParent(window.Level), false);
 
                 _handles.Add(window, handle);
