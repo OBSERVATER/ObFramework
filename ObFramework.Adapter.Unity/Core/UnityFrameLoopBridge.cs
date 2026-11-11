@@ -17,6 +17,7 @@ namespace ObFramework.Adapter.Unity.Core
     public sealed class UnityFrameLoopBridge : IApplicationFrameLoopDriver
     {
         private readonly Func<bool> _canDispatch;
+        private Action<UnityViewBindings>? _prepare;
         private FrameDispatcher? _dispatcher;
         private UnityViewBindings? _views;
         private bool _installed;
@@ -24,10 +25,19 @@ namespace ObFramework.Adapter.Unity.Core
         public UnityFrameLoopBridge() =>
             _canDispatch = () => _dispatcher != null && (_views?.IsReady ?? true);
 
+        internal UnityFrameLoopBridge(Action<UnityViewBindings> prepare) : this() => _prepare = prepare;
+
         void IApplicationFrameLoopDriver.BeginStartup(CancellationToken stopping) =>
             _views = new UnityViewBindings(stopping);
 
-        void IApplicationFrameLoopDriver.Prepare(IArchitecture architecture) => _views!.Prepare(architecture);
+        void IApplicationFrameLoopDriver.Prepare(IArchitecture architecture)
+        {
+            var views = _views!;
+            views.Prepare(architecture);
+            var prepare = _prepare;
+            _prepare = null;
+            prepare?.Invoke(views);
+        }
 
         async Task IApplicationFrameLoopDriver.ReleaseAsync()
         {

@@ -1,5 +1,5 @@
-﻿using System;
-using System.Collections;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ObFramework.Adapter.Unity.UI;
 using ObFramework.Core;
@@ -9,55 +9,31 @@ namespace ObFramework.Adapter.Unity.Core
 {
     public abstract class AGameLauncher : AViewController
     {
-        private PluginApplication _application = null!;
-        private bool _quitting;
-        private bool _quitRequested;
+        private UnityRuntimeHost? _runtime;
+
         protected abstract PluginApplication CreateApplication();
-        public override IArchitecture GetArchitecture() => _application.Architecture;
-        public Task ShutdownAsync() => _application?.StopAsync() ?? Task.CompletedTask;
+        protected virtual GameObject? GetGameManager() => null;
+        protected virtual IEnumerable<GameObject> GetPersistentRoots() => Array.Empty<GameObject>();
+
+        public override IArchitecture GetArchitecture() => _runtime!.Application!.Architecture;
+        public Task ShutdownAsync() => _runtime?.ShutdownAsync() ?? Task.CompletedTask;
 
         private async void Start()
         {
-            Application.wantsToQuit += WantsToQuit;
             try
             {
-                _application = CreateApplication();
-                await _application.StartAsync(new UnityFrameLoopBridge());
+                _runtime = UnityRuntimeHost.Reserve(gameObject, GetGameManager());
+                var runtime = _runtime;
+                await runtime.StartAsync(CreateApplication(),
+                    new UnityFrameLoopBridge(views => runtime.Prepare(GetPersistentRoots(), views)));
             }
-            catch (OperationCanceledException) { }
-            catch (Exception error) { Debug.LogError(error); }
-        }
-
-        private bool WantsToQuit()
-        {
-            if (_quitting)
-                return true;
-            if (!_quitRequested)
+            catch (Exception error)
             {
-                _quitRequested = true;
-                _ = QuitAsync();
+                if (error is not OperationCanceledException || _runtime?.IsStopping != true)
+                    Debug.LogError(error);
+                if (_runtime is { IsStopping: false } runtime)
+                    await runtime.StopAndObserveAsync();
             }
-            return false;
-        }
-
-        private async Task QuitAsync()
-        {
-            await StopAndObserveAsync();
-            _quitting = true;
-            await Task.Yield();
-            Application.Quit();
-        }
-
-        private void OnDestroy()
-        {
-            Application.wantsToQuit -= WantsToQuit;
-            _ = StopAndObserveAsync();
-        }
-
-        private async Task StopAndObserveAsync()
-        {
-            try { await ShutdownAsync(); }
-            catch (Exception error) { Debug.LogError(error); }
         }
     }
 }

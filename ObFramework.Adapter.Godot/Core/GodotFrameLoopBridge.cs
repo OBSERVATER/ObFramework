@@ -6,8 +6,11 @@ namespace ObFramework.Adapter.Godot.Core
 {
     public sealed partial class GodotFrameLoopBridge : Node, IFrameLoopDriver
     {
+        private readonly Func<bool> _canDispatch;
         private FrameDispatcher? _dispatcher;
         private GodotLateFrameLoopNode? _late;
+
+        public GodotFrameLoopBridge() => _canDispatch = () => _dispatcher != null;
 
         public override void _Ready()
         {
@@ -16,7 +19,7 @@ namespace ObFramework.Adapter.Godot.Core
             SetProcess(false);
             SetPhysicsProcess(false);
 
-            _late = new GodotLateFrameLoopNode { ProcessPriority = int.MaxValue };
+            _late = new GodotLateFrameLoopNode { ProcessPriority = int.MaxValue, Bridge = this };
             AddChild(_late);
             _late.SetProcess(false);
         }
@@ -31,7 +34,6 @@ namespace ObFramework.Adapter.Godot.Core
                 throw new InvalidOperationException("Godot frame loop must be in the SceneTree before binding.");
 
             _dispatcher = dispatcher;
-            _late.Dispatcher = dispatcher;
             SetProcess(true);
             SetPhysicsProcess(true);
             _late.SetProcess(true);
@@ -46,13 +48,12 @@ namespace ObFramework.Adapter.Godot.Core
                 SetPhysicsProcess(false);
             }
             if (_late != null && GodotObject.IsInstanceValid(_late))
-            {
-                _late.Dispatcher = null;
                 _late.SetProcess(false);
-            }
         }
 
-        public override void _Process(double delta) => _dispatcher?.Dispatch();
-        public override void _PhysicsProcess(double delta) => _dispatcher?.DispatchFixed();
+        public override void _ExitTree() => Unbind();
+        public override void _Process(double delta) => _dispatcher?.Dispatch(_canDispatch);
+        public override void _PhysicsProcess(double delta) => _dispatcher?.DispatchFixed(_canDispatch);
+        internal void DispatchLate() => _dispatcher?.DispatchLate(_canDispatch);
     }
 }

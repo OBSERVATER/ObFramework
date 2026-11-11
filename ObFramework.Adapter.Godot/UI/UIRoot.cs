@@ -1,4 +1,5 @@
 ﻿using Godot;
+using ObFramework.Adapter.Godot.Core;
 
 namespace ObFramework.Adapter.Godot.UI
 {
@@ -24,11 +25,11 @@ namespace ObFramework.Adapter.Godot.UI
             if (root == null)
             {
                 root = new Node { Name = name };
-                tree.Root.AddChild(root);
-
                 CreateLayer(root, "SceneLayer", 1);
                 CreateLayer(root, "CommonLayer", 2);
                 CreateLayer(root, "PopupLayer", 3);
+                tree.Root.AddChild(root);
+                GodotRuntimeHost.Find(tree)?.OwnUIRoot(root);
             }
             return new UIRoot(root);
         }

@@ -1,6 +1,6 @@
+using ObFramework.Adapter.UnrealSharp.Diagnostics;
 using ObFramework.Core;
 using ObFramework.Core.FrameLoop;
-using ObFramework.Adapter.UnrealSharp.Diagnostics;
 using UnrealSharp.Attributes;
 using UnrealSharp.UnrealSharpCore;
 
@@ -11,20 +11,66 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
 {
     private const float FixedStep = 0.02f;
     private const int MaxFixedStepsPerFrame = 4;
-    private PluginApplication? _application;
     private FrameDispatcher? _dispatcher;
+    private Func<bool>? _canContinue;
     private float _accumulator;
+    private bool _started;
     private bool _closed;
+
+    public PluginApplication? Application { get; private set; }
+    internal bool IsStopping => _closed;
+
+    public override void Initialize(FSubsystemCollectionBaseRef collection)
+    {
+        base.Initialize(collection);
+        IsTickable = true;
+    }
 
     public Task StartAsync(PluginApplication application)
     {
-        if (_application != null || _closed)
-            throw new InvalidOperationException("Subsystem can only start one application.");
-        _application = application ?? throw new ArgumentNullException(nameof(application));
-        return _application.StartAsync(this);
+        ArgumentNullException.ThrowIfNull(application);
+        return StartAsync(() => application);
     }
 
-    public Task StopAsync() => _application?.StopAsync() ?? Task.CompletedTask;
+    internal Task StartAsync(Func<PluginApplication> createApplication)
+    {
+        if (_started || _closed)
+            throw new InvalidOperationException("Subsystem can only start one application.");
+        _started = true;
+        var application = createApplication();
+        if (_closed)
+            return application.StopAsync();
+
+        Application = application;
+        Task startup;
+        try { startup = application.StartAsync(this); }
+        catch
+        {
+            Application = null;
+            throw;
+        }
+        return ObserveStartupAsync(application, startup);
+    }
+
+    private async Task ObserveStartupAsync(PluginApplication application, Task startup)
+    {
+        try { await startup; }
+        catch when (!_closed)
+        {
+            await ObserveCleanupAsync(application.StopAsync());
+            throw;
+        }
+    }
+
+    public Task StopAsync()
+    {
+        _closed = true;
+        if (Application is { } application)
+            return application.StopAsync();
+
+        Unbind();
+        return Task.CompletedTask;
+    }
 
     public void Bind(FrameDispatcher dispatcher)
     {
@@ -32,12 +78,14 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
         if (_closed || _dispatcher != null)
             throw new InvalidOperationException("Unreal frame loop cannot be bound.");
         _dispatcher = dispatcher;
+        _canContinue = () => !_closed && ReferenceEquals(_dispatcher, dispatcher);
         _accumulator = 0;
     }
 
     public void Unbind()
     {
         _dispatcher = null;
+        _canContinue = null;
         _accumulator = 0;
     }
 
@@ -45,7 +93,8 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
     {
         base.Tick(deltaSeconds);
         var dispatcher = _dispatcher;
-        if (dispatcher == null)
+        var canContinue = _canContinue;
+        if (_closed || dispatcher == null || canContinue == null)
             return;
 
         var elapsed = Math.Clamp(deltaSeconds, 0f, FixedStep * MaxFixedStepsPerFrame);
@@ -53,28 +102,30 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
         var steps = 0;
         while (_accumulator >= FixedStep && steps < MaxFixedStepsPerFrame)
         {
-            dispatcher.DispatchFixed();
             _accumulator -= FixedStep;
+            dispatcher.DispatchFixed(canContinue);
+            if (!canContinue())
+                return;
             steps++;
         }
         if (steps == MaxFixedStepsPerFrame && _accumulator >= FixedStep)
             _accumulator = 0;
 
-        dispatcher.Dispatch();
-        dispatcher.DispatchLate();
+        dispatcher.Dispatch(canContinue);
+        if (canContinue())
+            dispatcher.DispatchLate(canContinue);
     }
 
     public override void Deinitialize()
     {
-        _closed = true;
-        Unbind();
-        _ = StopAndObserveAsync();
+        IsTickable = false;
+        _ = ObserveCleanupAsync(StopAsync());
         base.Deinitialize();
     }
 
-    private async Task StopAndObserveAsync()
+    private static async Task ObserveCleanupAsync(Task cleanup)
     {
-        try { await StopAsync(); }
+        try { await cleanup; }
         catch (Exception error) { ObFLog.LogError(error.ToString()); }
     }
 }

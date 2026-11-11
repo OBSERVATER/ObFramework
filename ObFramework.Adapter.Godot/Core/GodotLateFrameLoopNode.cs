@@ -1,15 +1,11 @@
 using Godot;
-using ObFramework.Core.FrameLoop;
 
 namespace ObFramework.Adapter.Godot.Core
 {
     public sealed partial class GodotLateFrameLoopNode : Node
     {
-        internal FrameDispatcher? Dispatcher { get; set; }
+        internal GodotFrameLoopBridge? Bridge { get; set; }
 
-        public override void _Process(double delta)
-        {
-            Dispatcher?.DispatchLate();
-        }
+        public override void _Process(double delta) => Bridge?.DispatchLate();
     }
 }

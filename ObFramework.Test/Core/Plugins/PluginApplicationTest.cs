@@ -11,6 +11,7 @@ public class PluginApplicationTest
     {
         public List<string> Events { get; } = new();
         public TaskCompletionSource<bool>? Pending;
+        public Exception? RollbackFailure;
         public void Register(PluginRegistration registration) { }
         public async Task InitAsync(IPluginContext plugins, CancellationToken ct)
         {
@@ -21,7 +22,7 @@ public class PluginApplicationTest
         public Task StopAsync(IPluginContext plugins)
         {
             Events.Add("plugin-stop");
-            return Task.CompletedTask;
+            return RollbackFailure == null ? Task.CompletedTask : Task.FromException(RollbackFailure);
         }
     }
     public interface IBusiness : ISystem { }
@@ -38,6 +39,7 @@ public class PluginApplicationTest
     {
         public readonly Plugin Plugin = new();
         public bool FailEntry;
+        public TaskCompletionSource<bool>? PendingEntry;
         protected override IPlugin[] CreatePlugins() => new IPlugin[] { Plugin };
         protected override IArchitecture CreateArchitecture(IPluginContext plugins)
         {
@@ -49,7 +51,7 @@ public class PluginApplicationTest
             Architecture.GetPlugin<Plugin>().Events.Add("enter");
             if (FailEntry)
                 throw new InvalidOperationException("entry failed");
-            return Task.CompletedTask;
+            return PendingEntry?.Task ?? Task.CompletedTask;
         }
         protected override Task StopGameAsync()
         {
@@ -99,28 +101,58 @@ public class PluginApplicationTest
         Assert.That(reentrantStop, Is.SameAs(stop));
         Assert.That(application.Plugin.Events, Is.EqualTo(new[]
         {
-            "driver-startup", "plugin-start", "architecture-start", "driver-prepare", "enter", "driver-bind", "driver-unbind",
+            "driver-startup", "plugin-start", "architecture-start", "driver-prepare", "driver-bind", "enter", "driver-unbind",
             "driver-release", "business-stop", "architecture-stop", "plugin-stop", "adapter-release"
         }));
     }
 
     [Test]
-    public async Task StopDrainsBusinessBeforeArchitecturePluginsAndAdapters()
+    public async Task StopDuringEntryUnbindsFramesAndDrainsWorkBeforeReleasingViews()
     {
-        var application = new Application();
-        await application.StartAsync();
+        var entry = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishWork = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var application = new Application { PendingEntry = entry };
+        var events = application.Plugin.Events;
+        var start = application.StartAsync(new ApplicationDriver(events));
         var work = application.RunAsync(async ct =>
         {
-            try { await Task.Delay(Timeout.Infinite, ct); }
-            finally { application.Plugin.Events.Add("work-stop"); }
+            await finishWork.Task;
+            events.Add("work-stop");
+            ct.ThrowIfCancellationRequested();
         });
-        await application.StopAsync();
+
+        var stop = application.StopAsync();
+        var detachedDuringEntry = events.Contains("driver-unbind");
+        finishWork.SetResult(true);
+        entry.SetResult(true);
+        await Assert.CatchAsync<OperationCanceledException>(async () => await start);
+        await stop;
         await Assert.CatchAsync<OperationCanceledException>(async () => await work);
-        await application.StopAsync();
-        Assert.That(application.Plugin.Events, Is.EqualTo(new[]
+        Assert.That(detachedDuringEntry, Is.True);
+        Assert.That(events, Is.EqualTo(new[]
         {
-            "plugin-start", "architecture-start", "enter", "work-stop", "business-stop", "architecture-stop", "plugin-stop", "adapter-release"
+            "driver-startup", "plugin-start", "architecture-start", "driver-prepare", "driver-bind", "enter",
+            "driver-unbind", "work-stop", "driver-release", "business-stop", "architecture-stop", "plugin-stop", "adapter-release"
         }));
+    }
+
+    [Test]
+    public async Task StopReportsPluginRollbackWithoutReplacingTheStartupFailure()
+    {
+        var application = new Application();
+        var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var startupError = new InvalidOperationException("startup failed");
+        var rollbackError = new InvalidOperationException("rollback failed");
+        application.Plugin.Pending = pending;
+        application.Plugin.RollbackFailure = rollbackError;
+
+        var start = application.StartAsync();
+        var stop = application.StopAsync();
+        pending.SetException(startupError);
+
+        Assert.That(await Assert.ThrowsAsync<InvalidOperationException>(async () => await start), Is.SameAs(startupError));
+        var shutdown = await Assert.ThrowsAsync<AggregateException>(async () => await stop);
+        Assert.That(shutdown!.Flatten().InnerExceptions, Is.EqualTo(new[] { rollbackError }));
     }
 
     [Test]

@@ -85,12 +85,14 @@ namespace ObFramework.Adapter.Unity.ViewBinding
                 throw new InvalidOperationException("OBF view binding is stopping.");
         }
 
-        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode) => ScanRoots(scene.GetRootGameObjects());
+
+        public void ScanRoots(IEnumerable<GameObject> roots)
         {
             BeginOperation();
             try
             {
-                foreach (var root in scene.GetRootGameObjects())
+                foreach (var root in roots)
                 {
                     if (!root)
                         continue;

@@ -39,13 +39,37 @@ namespace ObFramework.Core.FrameLoop
 
         private sealed class Phase<T> where T : class
         {
-            private readonly Dictionary<T, long> _registered = new();
-            private readonly List<KeyValuePair<T, long>> _snapshot = new();
-            private long _nextRegistration;
+            private readonly Dictionary<T, LinkedListNode<T?>> _registered = new();
+            private readonly LinkedList<T?> _active = new();
+            private readonly List<LinkedListNode<T?>> _pending = new();
             private bool _dispatching;
 
-            public void Add(T instance) => _registered.TryAdd(instance, ++_nextRegistration);
-            public void Remove(T instance) => _registered.Remove(instance);
+            public void Add(T instance)
+            {
+                if (_registered.ContainsKey(instance))
+                    return;
+                var registration = new LinkedListNode<T?>(instance);
+                _registered.Add(instance, registration);
+                if (_dispatching)
+                    _pending.Add(registration);
+                else
+                    _active.AddLast(registration);
+            }
+
+            public void Remove(T instance)
+            {
+                if (!_registered.Remove(instance, out var registration))
+                    return;
+                if (!_dispatching)
+                {
+                    _active.Remove(registration);
+                    return;
+                }
+
+                registration.Value = null;
+                if (registration.List != null)
+                    _pending.Add(registration);
+            }
 
             public void Dispatch(Action<T> tick, Func<bool>? canContinue)
             {
@@ -55,19 +79,24 @@ namespace ObFramework.Core.FrameLoop
                 _dispatching = true;
                 try
                 {
-                    _snapshot.AddRange(_registered);
-                    foreach (var entry in _snapshot)
+                    for (var registration = _active.First; registration != null; registration = registration.Next)
                     {
                         if (canContinue != null && !canContinue())
                             break;
-                        // A remove followed by an add must invalidate the original entry too.
-                        if (_registered.TryGetValue(entry.Key, out var registration) && registration == entry.Value)
-                            tick(entry.Key);
+                        if (registration.Value is T instance)
+                            tick(instance);
                     }
                 }
                 finally
                 {
-                    _snapshot.Clear();
+                    foreach (var registration in _pending)
+                    {
+                        if (registration.List != null)
+                            _active.Remove(registration);
+                        else if (registration.Value != null)
+                            _active.AddLast(registration);
+                    }
+                    _pending.Clear();
                     _dispatching = false;
                 }
             }

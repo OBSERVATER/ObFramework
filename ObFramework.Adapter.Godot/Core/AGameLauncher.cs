@@ -7,58 +7,38 @@ namespace ObFramework.Adapter.Godot.Core
 {
     public abstract partial class AGameLauncher : AViewController
     {
-        private PluginApplication _application = null!;
-        private bool _quitting;
+        private GodotRuntimeHost? _runtime;
+
         protected abstract PluginApplication CreateApplication();
-        public override IArchitecture GetArchitecture() => _application.Architecture;
-        public Task StopAsync() => _application?.StopAsync() ?? Task.CompletedTask;
+        protected virtual GodotRuntimeHost CreateRuntimeHost() => new GodotRuntimeHost { Name = "ObFrameworkRuntime" };
+
+        public override IArchitecture GetArchitecture() => _runtime?.Application?.Architecture
+            ?? throw new InvalidOperationException("Application is not initialized.");
+        public Task StopAsync() => _runtime?.StopAsync() ?? Task.CompletedTask;
 
         public override void _Ready()
         {
             base._Ready();
-            GetTree().AutoAcceptQuit = false;
-            var bridge = new GodotFrameLoopBridge();
-            AddChild(bridge);
-            _ = RunLaunchAsync(bridge);
+            // The root can still be adding the Bootstrap scene during _Ready.
+            Callable.From(() => { _ = LaunchAsync(); }).CallDeferred();
         }
 
-        private async Task RunLaunchAsync(GodotFrameLoopBridge bridge)
+        private async Task LaunchAsync()
         {
             try
             {
-                _application = CreateApplication();
-                await _application.StartAsync(bridge);
+                if (!IsInstanceValid(this) || !IsInsideTree() || IsQueuedForDeletion())
+                    return;
+
+                var tree = GetTree();
+                if (GodotRuntimeHost.Find(tree) != null)
+                    return;
+
+                var runtime = CreateRuntimeHost();
+                runtime.Attach(tree, this);
+                _runtime = runtime;
+                await runtime.StartAsync(CreateApplication);
             }
-            catch (OperationCanceledException) { }
-            catch (Exception error) { GD.PushError(error.ToString()); }
-        }
-
-        public override void _ExitTree()
-        {
-            _ = StopAndObserveAsync();
-            base._ExitTree();
-        }
-
-        public override void _Notification(int what)
-        {
-            base._Notification(what);
-            if (what != NotificationWMCloseRequest || _quitting)
-                return;
-            _quitting = true;
-            _ = QuitAsync();
-        }
-
-        private async Task QuitAsync()
-        {
-            var tree = GetTree();
-            await StopAndObserveAsync();
-            if (GodotObject.IsInstanceValid(tree))
-                tree.Quit();
-        }
-
-        private async Task StopAndObserveAsync()
-        {
-            try { await StopAsync(); }
             catch (Exception error) { GD.PushError(error.ToString()); }
         }
     }

@@ -13,11 +13,14 @@ namespace ObFramework.Core
         private readonly CancellationTokenSource _startup = new CancellationTokenSource();
         private PluginHost? _host;
         private IArchitecture? _architecture;
-        private IFrameLoopDriver? _driver;
+        private IApplicationFrameLoopDriver? _applicationDriver;
+        private IFrameLoopDriver? _boundDriver;
         private Task? _startTask;
         private Task? _stopTask;
+        private Task<List<Exception>>? _shutdown;
+        private Task? _cleanupTask;
+        private bool _binding;
         private bool _stopping;
-        private bool _cleaned;
         public IArchitecture Architecture => _architecture ?? throw new InvalidOperationException("Application is not initialized.");
 
         protected abstract IPlugin[] CreatePlugins();
@@ -40,29 +43,27 @@ namespace ObFramework.Core
         {
             try
             {
-                var applicationDriver = driver as IApplicationFrameLoopDriver;
-                if (applicationDriver != null)
-                {
-                    _driver = applicationDriver;
-                    applicationDriver.BeginStartup(_startup.Token);
-                    _startup.Token.ThrowIfCancellationRequested();
-                }
+                _applicationDriver = driver as IApplicationFrameLoopDriver;
+                _applicationDriver?.BeginStartup(_startup.Token);
+                ThrowIfStopping();
                 _host = new PluginHost(CreatePlugins());
+                ThrowIfStopping();
                 await _host.StartAsync(_startup.Token);
-                _startup.Token.ThrowIfCancellationRequested();
+                ThrowIfStopping();
                 _architecture = CreateArchitecture(_host.Context);
-                _startup.Token.ThrowIfCancellationRequested();
-                applicationDriver?.Prepare(_architecture);
-                _startup.Token.ThrowIfCancellationRequested();
-                await EnterGameAsync(_startup.Token);
-                _startup.Token.ThrowIfCancellationRequested();
-
+                ThrowIfStopping();
+                _applicationDriver?.Prepare(_architecture);
+                ThrowIfStopping();
                 if (driver != null)
                 {
-                    _driver = driver;
-                    _driver.Bind(_architecture.Frame);
+                    _boundDriver = driver;
+                    _binding = true;
+                    try { driver.Bind(_architecture.Frame); }
+                    finally { _binding = false; }
                 }
-                _startup.Token.ThrowIfCancellationRequested();
+                ThrowIfStopping();
+                await EnterGameAsync(_startup.Token);
+                ThrowIfStopping();
             }
             catch (Exception error)
             {
@@ -71,6 +72,12 @@ namespace ObFramework.Core
                 catch (Exception cleanupError) { error.Data["ApplicationCleanupError"] = cleanupError; }
                 throw;
             }
+        }
+
+        private void ThrowIfStopping()
+        {
+            if (_stopping)
+                throw new OperationCanceledException(_startup.Token);
         }
 
         public Task RunAsync(Func<CancellationToken, Task> work)
@@ -94,16 +101,17 @@ namespace ObFramework.Core
         private async Task StopCoreAsync()
         {
             var errors = new List<Exception>();
-            try { if (!_cleaned) _startup.Cancel(); }
-            catch (Exception error) { errors.Add(error); }
-            _ = _work.StopAsync();
+            if (!_binding)
+                _ = RequestShutdown();
             if (_startTask != null)
             {
                 try { await _startTask; }
                 catch (Exception error)
                 {
-                    if (error.Data["ApplicationCleanupError"] is Exception cleanupError)
-                        errors.Add(cleanupError);
+                    if (error.Data["PluginCleanupErrors"] is Exception pluginCleanup)
+                        errors.Add(pluginCleanup);
+                    if (error.Data["ArchitectureCleanupError"] is Exception architectureCleanup)
+                        errors.Add(architectureCleanup);
                 }
             }
             try { await CleanupAsync(); }
@@ -112,23 +120,38 @@ namespace ObFramework.Core
                 throw new AggregateException("Application shutdown failed.", errors);
         }
 
-        private async Task CleanupAsync()
+        private Task<List<Exception>> RequestShutdown()
         {
-            if (_cleaned)
-                return;
-            _cleaned = true;
+            if (_shutdown != null)
+                return _shutdown;
+
+            // Cancellation can resume startup before Cancel returns.
+            var completion = new TaskCompletionSource<List<Exception>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _shutdown = completion.Task;
             var errors = new List<Exception>();
-            var driver = _driver;
-            _driver = null;
-            try { driver?.Unbind(); }
+            try { _boundDriver?.Unbind(); }
             catch (Exception error) { errors.Add(error); }
-            if (driver is IApplicationFrameLoopDriver applicationDriver)
-            {
-                try { await applicationDriver.ReleaseAsync(); }
-                catch (Exception error) { errors.Add(error); }
-            }
+            _boundDriver = null;
+            try { _startup.Cancel(); }
+            catch (Exception error) { errors.Add(error); }
+            _ = _work.StopAsync();
+            completion.SetResult(errors);
+            return _shutdown;
+        }
+
+        private Task CleanupAsync() => _cleanupTask ??= CleanupCoreAsync();
+
+        private async Task CleanupCoreAsync()
+        {
+            var errors = await RequestShutdown();
             try { await _work.StopAsync(); }
             catch (Exception error) { errors.Add(error); }
+            if (_applicationDriver != null)
+            {
+                try { await _applicationDriver.ReleaseAsync(); }
+                catch (Exception error) { errors.Add(error); }
+                _applicationDriver = null;
+            }
             if (_architecture != null)
             {
                 try { await StopGameAsync(); }

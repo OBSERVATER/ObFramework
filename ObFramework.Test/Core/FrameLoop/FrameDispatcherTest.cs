@@ -37,7 +37,9 @@ public class FrameDispatcherTest
             other.OnTick = null;
             frame.Register(other);
             frame.Register(added);
+            frame.Register(added);
             completed++;
+            dispatch();
         }
 
         left.OnTick = () => ChangeRegistrations(left, right);

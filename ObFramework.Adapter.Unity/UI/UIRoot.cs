@@ -1,4 +1,6 @@
-﻿using UnityEngine;
+﻿using ObFramework.Adapter.Unity.Core;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace ObFramework.Adapter.Unity.UI
 {
@@ -12,9 +14,13 @@ namespace ObFramework.Adapter.Unity.UI
         public Transform CommonRoot => _commonRoot;
         public Transform PopupRoot => _popupRoot;
 
+        internal Scene OriginalScene { get; private set; }
+
         private void Awake()
         {
-            DontDestroyOnLoad(gameObject);
+            OriginalScene = gameObject.scene;
+            if (transform.parent == null && !GetComponentInChildren<AGameLauncher>(true))
+                DontDestroyOnLoad(gameObject);
         }
         public void Init()
         {
