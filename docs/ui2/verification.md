@@ -1,0 +1,74 @@
+# UI 2.0 验收与兼容性说明
+
+本文件对应 T18「完整 UI 2.0 验收、兼容性审查与使用文档」，记录本阶段实际验证过的内容、
+验证命令和明确未验证的部分。
+
+## 构建与测试（本机最终状态）
+
+| 项目 | 结果 |
+|---|---|
+| `Framework/ObFramework.sln` 全量构建 | ✅ 0 errors（仅既有 warning：离线 NuGet NU1900、Godot/Immutable 版本提示） |
+| 10 个项目单独构建（含 Editor.Core、Adapter.Unity.Editor） | ✅ 全部 0 errors |
+| 纯 .NET 测试（反射 NUnit runner） | ✅ **298 / 298 通过** |
+| CLI 帮助命令 | ✅ `ob config --help`、`ob unity --help` 可用 |
+| T17 部署 dry-run（真实 EditorDeploy payload） | ✅ 45/45 文件规划，重复部署稳定，remove 只删自有文件 |
+
+验证命令（本机环境；正常环境直接用 `dotnet build` / `dotnet test`）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Build-All-Obf.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1 -Filter Cli
+```
+
+> 本机 `dotnet test`/vstest 测试宿主不可用（跨进程句柄被环境拒绝），因此测试通过标准 NUnit
+> 测试 + 反射 runner 执行；测试本身不依赖该 runner，正常机器/CI 可直接 `dotnet test`。
+
+## 测试覆盖（按工单）
+
+| 工单 | 覆盖测试 |
+|---|---|
+| T01/T02 业务 View 与生命周期 | `Core/UI/UIFixtures.cs`、`UILifecycleTest.cs`（OnInit 一次、OnOpen 每次、关闭/缓存、最终释放唯一、失败清理、Stack 重建、停机）、`UIPluginTest`（Single/Multiple/Stack/LRU 兼容行为） |
+| T03/T12 Unity Adapter 与子组件 | `UI/ChildViewTest.cs`（重复 Bind、通知刷新、父级释放唯一、Rebind 不取消任务）；Adapter 由静态编译验证 |
+| T04/T05 Godot / UnrealSharp | 工程静态编译（0 errors） |
+| T14 显式注册 | `Core/UI/UIViewRegistryTest.cs`（注册、重复拒绝、工厂） |
+| T07/T09/T10/T11 CDE 生成器 | `Generator/CDEGeneratorTests.cs` + `CDETestHarness.cs`（27）：生成属性/命令、通知、CanExecute、防重入、并发、取消、异常恢复、跨 View 隔离、OBF1xx 诊断 |
+| T08 Unity 绑定生成器 | `Generator/UnityBinding*`（16）：OneWay/Format、TwoWay + 反馈保护、CanExecute、按 View 实例分发、生命周期、异步边界、手写/带参命令、OBFU1xx 诊断；双生成器同轮最终编译 |
+| T13 setup.json CLI | `Cli/*`（103）：模块注册、发现、解析/保存保留未知节点、Root/路径校验、`--set/--unset`、诊断 |
+| T15/T16 Editor 生成 | `Editor/*`（95）：View/VC 模板、重新生成保留、破坏性预览、诊断、setup 快照、资源 Key、注册代码、重复映射 |
+| T17 部署 | `Cli/*`：安装/升级/卸载、自有文件清单、用户文件保留、payload 完整性回归 |
+
+## 兼容性核对
+
+- **Unity 2022.3 / C# 9**：生成器与 Editor.Core 输出 C# 9 兼容代码；Editor glue 与 Adapter.Unity
+  以本机 Unity 2022.3.58.f1 的 UnityEngine/UnityEditor DLL 静态编译通过。
+- **Roslyn**：引擎无关生成器使用 `Microsoft.CodeAnalysis 5.9`（incremental generator），Unity
+  生成器保持 `3.8` API 以兼容 Unity 2022.3 自带编译器；测试在同一 Driver 中同时运行两个生成器并
+  最终编译通过（不依赖对方本轮生成的符号）。
+- **第三方目录**：`Framework/ThirdParty` 未改动。
+- **既有能力保留**：Core Architecture、IController/ICan*、ACommand/AAsyncCommand、UIPlugin/UIManager、
+  ResourcePlugin、ViewBinding、LRU、UIStack 均沿用/扩展，没有新增平行管理器。
+- **旧接口收缩**：`IUIWindow` 只保留 `EUILevel` 身份；删除旧 `Init/Open/Close` 转发、旧窗口
+  UIPlugin API、未使用的 `EUIState`；`AUIWindow` 各引擎只保留身份。旧 UIPlugin 测试已迁移到业务
+  View 语义并保持行为覆盖。
+- **Godot 构建适配**：`ObFramework.Adapter.Godot` 由 netstandard2.1 调整为 net8.0，以匹配本机
+  GodotSharp 4.7.2；业务契约不变（详见 adapter-integration.md）。
+
+## 明确未验证（留待示例项目阶段）
+
+以下能力本阶段**没有**实际运行验证，文档与测试均不声称已验证：
+
+1. Unity：Prefab 序列化/`PrefabUtility` 引用赋值、Editor 菜单发现、asmdef 导入与 Editor 编译、
+   UGUI/TMP 事件时序、Addressables 句柄生命周期、IL2CPP。
+2. Godot：PackedScene 真实加载/层级/`QueueFree`、`_Ready` 与 Architecture 解析时序。
+3. UnrealSharp：UUserWidget 异步类加载、`ConfigureWithUnrealContext` 线程行为、
+   `TStrongObjectPtr` 与 Canvas 层级。
+4. 生成代码与真实引擎控件的联合编译/运行（本阶段以 stub 编译面 + 纯 .NET 执行为准）。
+5. NuGet 部署后的 Unity 工程内实际导入结果（本阶段只验证文件部署规划与幂等/所有权语义）。
+
+## 已知后续项
+
+- `ob config` / `ob unity deploy` 需要重新构建 CLI 才能反映 EditorDeploy payload 变化（构建期 glob）。
+- Analyzer DLL（`ObFramework.Generator.Unity.dll`）以 NuGet `analyzers/dotnet/cs` 分发；把该 DLL
+  自动复制进 Unity `Assets` 并生成 `RoslynAnalyzer` 标签属于示例项目阶段工作（EditorDeploy 不含 DLL）。
+- 非 Unity 引擎的 Editor 生成工具不在首阶段范围。
