@@ -27,8 +27,9 @@ Framework (ObFramework)
 ObFramework.Generator            引擎无关 CDE 生成器（属性、嵌套 Command、CanExecute 通知）
 ObFramework.Generator.Unity      Unity 生成器（BindView 工厂 + 控件订阅/命令分发代码）
 
-ObFramework.Adapter.Unity        运行时 Unity Adapter（Prefab 加载、层级、资源句柄、UnityViewBindings）
-ObFramework.Adapter.Unity.Editor（编译校验项目）+ Adapter.Unity/EditorDeploy（可部署到 Unity 的 Editor 源文件）
+ObFramework.Adapter.Unity        运行时 Unity Adapter（Prefab 加载、层级、资源句柄、UnityViewBindings）；
+                                 同一工程另提供 `-p:ObfBuildEditorTools=true` 构建模式，仅用于
+                                 EditorDeploy（可部署到 Unity 的 Editor 源文件）的静态编译校验
 
 ObFramework.Editor.Core          纯 C# 的 Editor 生成核心（模板、绑定表、注册代码、诊断），可纯 .NET 测试
 

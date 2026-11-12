@@ -8,17 +8,29 @@
 | 项目 | 结果 |
 |---|---|
 | `Framework/ObFramework.sln` 全量构建 | ✅ 0 errors（仅既有 warning：离线 NuGet NU1900、Godot/Immutable 版本提示） |
-| 10 个项目单独构建（含 Editor.Core、Adapter.Unity.Editor） | ✅ 全部 0 errors |
-| 纯 .NET 测试（反射 NUnit runner） | ✅ **302 / 302 通过** |
+| 9 个项目单独构建 | ✅ 全部 0 errors |
+| `ObFramework.Adapter.Unity` 的 Editor 工具编译校验构建模式（`-p:ObfBuildEditorTools=true`） | ✅ 0 errors（产物 `ObFramework.Adapter.Unity.EditorTools.dll`，仅作静态编译校验、不随包分发） |
+| 纯 .NET 测试（反射 NUnit runner） | ✅ **303 / 303 通过** |
 | CLI 帮助命令 | ✅ `ob config --help`、`ob unity --help` 可用 |
-| T17 部署 dry-run（真实 EditorDeploy payload） | ✅ 45/45 文件规划，重复部署稳定，remove 只删自有文件 |
+| T17 部署 dry-run（真实 EditorDeploy payload + Analyzer） | ✅ 47/47 文件规划（45 个 Editor 文件 + `ObFramework.Generator.Unity.dll` + `.dll.meta`），重复部署稳定，remove 只删自有文件 |
 
 验证命令（本机环境；正常环境直接用 `dotnet build` / `dotnet test`）：
 
 ```powershell
+# 全量构建（含 Adapter.Unity 的 Editor 工具编译校验模式）
 powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Build-All-Obf.ps1
+# 纯 .NET 测试（全量 / 分组）
 powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1 -Filter Cli
+```
+
+也可以直接使用标准命令：
+
+```powershell
+dotnet build Framework/ObFramework.sln
+dotnet test ObFramework.Test/ObFramework.Test.csproj
+# Editor 工具静态编译校验（独立的中间目录，避免覆盖运行时 Adapter 产物）
+dotnet build ObFramework.Adapter.Unity/ObFramework.Adapter.Unity.csproj -p:ObfBuildEditorTools=true
 ```
 
 > 本机 `dotnet test`/vstest 测试宿主不可用（跨进程句柄被环境拒绝），因此测试通过标准 NUnit
@@ -69,6 +81,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.
   规则一致），不再无条件删除。
 - 文档与实现对齐：`{view}` 使用 View 类型名、Prefab 约定 `<ViewName>.prefab`、命令构造函数形态。
 
+## 收尾阶段修正（项目合并与 Analyzer 部署）
+
+- **Adapter 项目合并**：删除独立的 `ObFramework.Adapter.Unity.Editor` 工程，改为同一
+  `ObFramework.Adapter.Unity.csproj` 的第二构建模式 `-p:ObfBuildEditorTools=true`：默认构建只产出
+  运行时 Adapter 程序集（`EditorDeploy/**` 不参与编译），校验模式额外编译 EditorDeploy 根部的
+  UnityEditor glue 并引用 `Editor.Core`，产物为 `ObFramework.Adapter.Unity.EditorTools.dll`，仅作静态
+  编译守卫、不随包分发。仓库从 10 个项目收敛为 9 个，Editor 工具源码仍保持单一来源。
+- **Analyzer 随 CLI 部署**：`ObFramework.Cli` 构建时嵌入已构建的 `ObFramework.Generator.Unity.dll`
+  与带 `RoslynAnalyzer` 标签的 `.meta`（`EmbedObfUnityGeneratorAnalyzer` 目标在资源收集前加入），
+  `ob unity deploy` 一次安装 Editor 源码 + asmdef/meta + Roslyn Analyzer，共 47 个文件；
+  `ObFramework.Test/Cli/UnityDeploymentManifestTest` 增加回归测试锁定 payload 中的 DLL 与 meta。
+- **Adapter NuGet 包**：运行时 Adapter 工程把 `EditorDeploy/**` 作为 `contentFiles` 打包，安装
+  Adapter 包的项目也能检查/复用同一份 Editor 工具资源（CLI 仍读取自己嵌入的副本）。
+
 ## 明确未验证（留待示例项目阶段）
 
 以下能力本阶段**没有**实际运行验证，文档与测试均不声称已验证：
@@ -87,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.
 ## 已知后续项
 
 - `ob config` / `ob unity deploy` 需要重新构建 CLI 才能反映 EditorDeploy payload 变化（构建期 glob）。
-- Analyzer DLL（`ObFramework.Generator.Unity.dll`）以 NuGet `analyzers/dotnet/cs` 分发；把该 DLL
-  自动部署进 Unity `Assets` 并生成 `RoslynAnalyzer` 标签属于示例项目阶段安装工作（部署器已支持
-  `.dll` → roslyn-analyzer 的文件类型映射与计划扩展）。
+  CLI 构建会自动重新构建并嵌入 `ObFramework.Generator.Unity`，但 EditorDeploy 内容变化后仍需重建 CLI。
+- Analyzer 已随 CLI payload 部署（`ObFramework.Generator.Unity.dll` + `RoslynAnalyzer` meta，47 文件 dry-run
+  已验证）；Unity Editor 内的实际导入/编译结果仍属于示例项目阶段验证项（见上节第 5 条）。
 - 非 Unity 引擎的 Editor 生成工具不在首阶段范围。

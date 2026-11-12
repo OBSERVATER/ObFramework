@@ -13,8 +13,22 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Framework\ObFramework.csproj" />
+    <!-- Build-order only: the Unity Roslyn source generator is embedded as a deployable analyzer
+         resource below, so it must be built before this project gathers its resources. -->
+    <ProjectReference Include="..\ObFramework.Generator.Unity\ObFramework.Generator.Unity.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
-    <ItemGroup>
+
+  <PropertyGroup>
+    <!-- Unity Roslyn analyzer deployed into the Unity project's Editor folder. Resolves to the
+         per-project bin layout for regular builds and to the shared ArtifactsPath layout used by
+         this repository's build scripts. -->
+    <ObfUnityGeneratorDll Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::NormalizePath('$(ArtifactsPath)', 'bin', 'ObFramework.Generator.Unity', '$(Configuration.ToLowerInvariant())', 'ObFramework.Generator.Unity.dll'))</ObfUnityGeneratorDll>
+    <ObfUnityGeneratorDll Condition="'$(ObfUnityGeneratorDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'ObFramework.Generator.Unity', 'bin', '$(Configuration)', 'netstandard2.0', 'ObFramework.Generator.Unity.dll'))</ObfUnityGeneratorDll>
+  </PropertyGroup>
+
+  <ItemGroup>
 		<EmbeddedResource Include="Templates\*.tpl" LogicalName="%(Filename)%(Extension)" />
 
 		<!-- Deployment plan for `ob unity deploy`: data only, no payload duplication. The plan is
@@ -23,12 +37,21 @@
 		<EmbeddedResource Include="Resources\UnityDeployPlan\deploy-manifest.json"
 						  LogicalName="ObFramework.Cli.UnityDeployPlan/deploy-manifest.json" />
 
+		<!-- Deployable .meta for the Unity Roslyn analyzer (label-based import rule). -->
+		<EmbeddedResource Include="Resources\UnityDeployPlan\ObFramework.Generator.Unity.dll.meta"
+						  LogicalName="ObFramework.Cli.UnityEditorDeploy/ObFramework.Generator.Unity.dll.meta"
+						  WithCulture="false" />
+		<None Include="Resources\UnityDeployPlan\ObFramework.Generator.Unity.dll.meta"
+			  Pack="true"
+			  WithCulture="false"
+			  PackagePath="contentFiles/any/any/UnityEditorDeploy/ObFramework.Generator.Unity.dll.meta" />
+
 		<!-- Unity Editor deployable payload: authored once under the Unity Adapter project and
-		     adopted here at build time (Lead decision: do not duplicate the payload in ObFramework.Cli).
-		     Embedding keeps `ob unity deploy` working from an installed NuGet dotnet tool: a tool
-		     package only guarantees the tool assembly + its dependencies on disk after restore, so a
-		     DLL-embedded resource is more reliable than a package content folder. The payload now also
-		     ships as contentFiles (below) for inspection; the deployer reads the embedded copy.
+		     adopted here at build time (no payload duplication). Embedding keeps `ob unity deploy`
+		     working from an installed NuGet dotnet tool: a tool package only guarantees the tool
+		     assembly + its dependencies on disk after restore, so a DLL-embedded resource is more
+		     reliable than a package content folder. The payload also ships as contentFiles (below)
+		     for inspection; the deployer reads the embedded copy.
 		     WithCulture="false" is REQUIRED: MSBuild infers a culture from file names such as
 		     `Foo.cs.meta` ("cs" = Czech) and would move those resources into a satellite assembly,
 		     silently dropping every `*.cs.meta` file from the deployable payload. -->
@@ -40,6 +63,26 @@
 			  WithCulture="false"
 			  PackagePath="contentFiles/any/any/UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
+
+  <!-- The Unity Roslyn source generator itself (ObFramework.Generator.Unity.dll) is part of the
+       deployable tooling (Unity imports it with the RoslynAnalyzer label). It is produced by the
+       project reference above, so it is added after that build and before embedded resources are
+       collected; otherwise MSBuild would evaluate the file path before it exists. -->
+  <Target Name="EmbedObfUnityGeneratorAnalyzer"
+          BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup Condition="$([System.IO.File]::Exists('$(ObfUnityGeneratorDll)'))">
+      <EmbeddedResource Include="$(ObfUnityGeneratorDll)"
+                        LogicalName="ObFramework.Cli.UnityEditorDeploy/ObFramework.Generator.Unity.dll"
+                        WithCulture="false" />
+      <None Include="$(ObfUnityGeneratorDll)"
+            Pack="true"
+            PackagePath="contentFiles/any/any/UnityEditorDeploy/ObFramework.Generator.Unity.dll" />
+    </ItemGroup>
+    <Warning Condition="!$([System.IO.File]::Exists('$(ObfUnityGeneratorDll)'))"
+             Text="ObFramework.Generator.Unity.dll was not found at $(ObfUnityGeneratorDll); 'ob unity deploy' will ship without the Unity Roslyn analyzer. Build ObFramework.Generator.Unity first." />
+  </Target>
+
     <ItemGroup>
       <PackageReference Include="Spectre.Console.Cli" Version="0.57.2" />
     </ItemGroup>

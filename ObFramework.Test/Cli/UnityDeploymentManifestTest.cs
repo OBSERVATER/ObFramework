@@ -196,6 +196,28 @@ namespace ObFramework.Test.Cli
         }
 
         [Test]
+        public void EmbeddedPayload_ContainsUnityRoslynAnalyzerAndImportMeta()
+        {
+            // The Unity Roslyn source generator is part of the deployable Editor tooling: the CLI
+            // embeds the built ObFramework.Generator.Unity.dll plus a .meta carrying the
+            // RoslynAnalyzer label, so `ob unity deploy` installs it without a manual copy step.
+            var source = EmbeddedDeployableFileSource.CreateDefault();
+            var files = source.ListFiles();
+            if (files.Count == 0)
+                return; // payload not embedded in this build configuration (EditorDeploy absent)
+
+            Assert.That(files, Does.Contain("ObFramework.Generator.Unity.dll"));
+            Assert.That(files, Does.Contain("ObFramework.Generator.Unity.dll.meta"));
+
+            Assert.That(source.TryRead("ObFramework.Generator.Unity.dll", out var assemblyBytes), Is.True);
+            Assert.That(assemblyBytes.Length, Is.GreaterThan(0));
+
+            Assert.That(source.TryRead("ObFramework.Generator.Unity.dll.meta", out var metaBytes), Is.True);
+            var meta = System.Text.Encoding.UTF8.GetString(metaBytes);
+            Assert.That(meta, Does.Contain("RoslynAnalyzer"));
+        }
+
+        [Test]
         public void AutoDeploy_RespectsExcludePatterns()
         {
             using var context = new DeploymentTestContext();
