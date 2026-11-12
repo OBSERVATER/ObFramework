@@ -93,6 +93,26 @@ ob unity deploy <UnityProject> --source <EditorDeploy目录>   # 从本地目录
 - 文件被用户修改后（哈希不符）`remove` 保留该文件并报告；
 - NuGet 安装本身不执行自定义脚本，部署必须由用户显式调用 CLI 命令完成。
 
+## CLI 的引擎边界：通用核心 vs Unity 专用模块
+
+CLI 的**程序集/代码引用**只有引擎无关的 `ObFramework`（以及 build-order-only、不参与编译的
+`ObFramework.Generator.Unity` 项目引用，仅用于把生成器 DLL 作为资源嵌入；CLI 输出目录不含
+Adapter/Editor/Generator 程序集）。Unity 相关能力是模块化挂载的：
+
+| 部分 | 归属 | 说明 |
+|---|---|---|
+| `Config/` 下的 `SetupJsonDocument`、`ModuleConfigRegistry`、`SetupJsonDiscovery`、`SetupConfigPaths`、`SetupConfigValues` 等 | **通用** | 模块化 POCO 配置的组合、发现、保存保留未知节点、Root/相对路径校验；不依赖任何引擎 |
+| `Config/Modules/UnitySetupConfig.cs` | **Unity 专用** | 只是 `unity` 模块的 POCO 声明；新增引擎模块只需加一个 POCO + 一行 `registry.Register<...>` |
+| `Deployment/` 的 `DeployableFileSource`、`DeploymentManifest`、`OwnedDeploymentManifest`、`DeploymentResult` | **通用机制**（清单为 Unity 布局做了默认值） | 文件源抽象、计划模型、SHA-256 所有权、幂等/保留语义；默认 target root、`Assets/` 校验与 asmdef/meta/roslyn-analyzer 类型映射是 Unity 的默认约定 |
+| `Deployment/UnityEditorDeployer.cs`、`Deployment/UnityDeployCliModule.cs`、`Commands/UnityCommand.cs`、`Resources/UnityDeployPlan/*` | **Unity 专用** | Unity 工程布局（`Assets/**`）、Editor 工具 payload、`ob unity deploy|remove` 命令 |
+| `Core/CliModule`（`InjectCommand<T>` 扩展点） | **通用** | 引擎模块通过它注册命令，不修改 CLI 本体、不扫描程序集 |
+
+因此：**配置文件组合层是引擎通用的；部署层是"通用文件部署引擎 + Unity 专用实现"**。
+其它引擎（如 Godot）接入时应新增自己的 `XxxEditorDeployer` + 命令 + 模块 POCO，复用
+`DeployableFileSource/OwnedDeploymentManifest` 的幂等与所有权语义，而不是把 Unity 的
+`Assets/` 约定硬套过去；若目标布局差异较大，可把 `DeploymentPaths` 的 Unity 校验抽成
+“目标布局策略”，这是当前结构里唯一仍带 Unity 假设的通用类。
+
 ## 相关测试
 
 `ObFramework.Test/Cli/*` 覆盖：模块注册、setup.json 发现/解析/保存与未知节点保留、Root 绝对路径
