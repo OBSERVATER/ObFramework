@@ -13,16 +13,22 @@ UI 2.0 首阶段只验证纯 .NET 行为与 Roslyn 生成代码，不包含 Unit
 | Roslyn `CSharpGeneratorDriver` | `Generator/*Test.cs` | 生成代码编译、诊断、运行期行为（`Assembly.Load` 后反射调用） |
 | 纯文件系统 | `Cli/*Test.cs`、`Editor/*Test.cs` | setup.json 解析/保存/发现、Editor 模板与注册代码生成、CLI 部署文件行为 |
 
-## 运行方式（本机受限环境）
-
-本机 `dotnet test` / vstest 测试宿主不可用（跨进程句柄被环境拒绝），测试通过反射 runner 执行：
+## 运行方式
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1 -Filter UI
+dotnet test ObFramework.Test/ObFramework.Test.csproj
 ```
 
-在正常机器/CI 上直接 `dotnet test ObFramework.Test/ObFramework.Test.csproj` 即可；测试本身是
-标准 NUnit 测试，不依赖该 runner。
+构建/测试也可以用仓库根目录的脚本（含 Editor 工具编译校验模式）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
+# 或 macOS/Linux
+bash build.sh
+```
+
+> 开发环境若 `dotnet test` / vstest 测试宿主不可用（跨进程句柄被拒绝），可改用任意 NUnit runner
+> 执行同一测试程序集；测试本身是标准 NUnit 测试，不依赖特定 runner。
 
 ## 编写测试的约定
 

@@ -10,6 +10,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Single shared source-declaration naming rule ([ObservableProperty] field -> property and
+         [RelayCommand] method -> command type). The CDE generator project includes this file
+         directly; the Unity generator links the same source into its own assembly so both
+         generators can never interpret a business View declaration differently. There is
+         deliberately no project reference between the two generator assemblies. -->
+    <Compile Include="..\ObFramework.Generator\CDE\CdeSourceRules.cs" Link="CdeSourceRules.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Unity 2022.3 ships Roslyn 4.3.1; the incremental generator API (IIncrementalGenerator)
          is available there and is the documented approach for this repository. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />

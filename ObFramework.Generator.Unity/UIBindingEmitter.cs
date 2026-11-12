@@ -458,7 +458,23 @@ namespace ObFramework.Generator.Unity
             sb.Append(Indent2).AppendLine("{");
             sb.Append(Indent3).Append("if (__view == null || ").Append(field).AppendLine(" == null)");
             sb.Append(Indent4).AppendLine("return;");
-            sb.Append(Indent3).Append("var __command = ").Append(CommandConstruction(binding, dispatch: false)).AppendLine(";");
+
+            // Parameterized commands must be evaluated against the control's CURRENT value during a
+            // refresh (initial bind or a CanExecute notification), not the default/previous event
+            // value: `CanExecute(bool value) => value` on a Toggle that is already on must be
+            // interactable immediately. String sources parse lazily and fall back to the stored value.
+            var useCurrentValue = false;
+            if (binding.RefreshNeedsValue && binding.Conversion != null && binding.Conversion.ParseStatement == null)
+            {
+                var currentValue = CurrentControlValueExpression(binding, field);
+                if (currentValue != null)
+                {
+                    sb.Append(Indent3).Append("var __value = ").Append(currentValue).AppendLine(";");
+                    useCurrentValue = true;
+                }
+            }
+
+            sb.Append(Indent3).Append("var __command = ").Append(CommandConstruction(binding, dispatch: false, useCurrentValue)).AppendLine(";");
             sb.Append(Indent3).AppendLine("var __canExecute = __command.CanExecute();");
             if (binding.HasRunningCheck)
             {
@@ -478,6 +494,10 @@ namespace ObFramework.Generator.Unity
             sb.Append(Indent2).Append("private void ").Append(binding.HandlerMethod).AppendLine(signature);
             sb.Append(Indent2).AppendLine("{");
             sb.Append(Indent3).AppendLine("if (__view == null)");
+            sb.Append(Indent4).AppendLine("return;");
+            // Programmatic display refresh assigns the control value; that must never look like a
+            // user interaction (one Toggle can feed a [UIBindData] field and a [UIBindCommand] field).
+            sb.Append(Indent3).AppendLine("if (__uiUpdating)");
             sb.Append(Indent4).AppendLine("return;");
             if (binding.Conversion != null)
             {
@@ -511,7 +531,20 @@ namespace ObFramework.Generator.Unity
             }
         }
 
-        private static string CommandConstruction(CommandBindingPlan binding, bool dispatch)
+        private static string? CurrentControlValueExpression(CommandBindingPlan binding, string field)
+        {
+            switch (binding.Source)
+            {
+                case ValueSourceKind.Bool:
+                    return field + ".isOn";
+                case ValueSourceKind.Float:
+                    return field + ".value";
+                default:
+                    return null;
+            }
+        }
+
+        private static string CommandConstruction(CommandBindingPlan binding, bool dispatch, bool useCurrentValue = false)
         {
             var takesView = dispatch ? binding.DispatchTakesView : binding.RefreshTakesView;
             var needsValue = dispatch ? binding.DispatchNeedsValue : binding.RefreshNeedsValue;
@@ -522,6 +555,8 @@ namespace ObFramework.Generator.Unity
             {
                 if (dispatch && !binding.HasStoredValue)
                     arguments.Add(binding.Conversion != null ? binding.Conversion.Expression : "__value");
+                else if (!dispatch && useCurrentValue && binding.Conversion != null)
+                    arguments.Add(binding.Conversion.Expression);
                 else
                     arguments.Add(binding.StoredValueFieldName);
             }

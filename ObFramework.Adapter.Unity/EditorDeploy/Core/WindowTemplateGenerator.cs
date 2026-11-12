@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ObFramework.Editor.Core
 {
@@ -73,12 +74,26 @@ namespace ObFramework.Editor.Core
 
             var changeByField = new Dictionary<string, DestructiveChange>(StringComparer.Ordinal);
             var removalRanges = new List<KeyValuePair<int, int>>();
+            var updates = new List<SourceReplacement>();
             var declarations = SourceTextMerger.CollectBindingDeclarations(existing, viewName);
             foreach (var declaration in declarations)
             {
                 var id = EditorGenerationResult.WindowFieldChangeId(declaration.FieldName);
                 if (rowByField.TryGetValue(declaration.FieldName, out var field) && TargetsMatch(declaration, field))
+                {
+                    // The binding table can change Mode/Format for an existing control without
+                    // renaming it. Refresh only the generator-owned attribute/field declaration and
+                    // keep hand-written attributes/comments (see BuildUpdatedFieldDeclaration).
+                    if (FieldDeclarationNeedsUpdate(declaration, existing, field))
+                    {
+                        updates.Add(new SourceReplacement(
+                            declaration.Start,
+                            declaration.End,
+                            BuildUpdatedFieldDeclaration(existing, declaration, field, viewName)));
+                    }
+
                     continue;
+                }
 
                 var change = rowByField.TryGetValue(declaration.FieldName, out field)
                     ? new DestructiveChange(
@@ -142,6 +157,8 @@ namespace ObFramework.Editor.Core
             var updated = removalRanges.Count == 0
                 ? existing
                 : SourceTextMerger.RemoveRanges(existing, removalRanges);
+            if (updates.Count > 0)
+                updated = SourceTextMerger.ReplaceRanges(updated, updates);
 
             if (!SourceTextMerger.TryFindClassBody(updated, windowName, out bodyStart, out bodyEnd, out error))
             {
@@ -177,6 +194,8 @@ namespace ObFramework.Editor.Core
 
                 updated = SourceTextMerger.InsertMembersBeforeClassEnd(updated, bodyEnd, block.ToString());
             }
+
+            updated = UpdateGeneratedWindowMembers(updated, windowName, architectureTypeFullName, level, diagnostics);
 
             return new GeneratedFile(windowPath, GeneratedFileKind.Window, updated, isModified: !string.Equals(updated, existing, StringComparison.Ordinal));
         }
@@ -269,6 +288,158 @@ namespace ObFramework.Editor.Core
 
             return EditorNaming.TryResolveCommandNames(declaration.MemberName, out _, out var existingCommand) &&
                    string.Equals(existingCommand, field.CommandName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// True when the generated [UIBindData] options (Mode/Format) on an existing serialized field
+        /// no longer match the binding table. Commands have no options, so they never update in place.
+        /// </summary>
+        private static bool FieldDeclarationNeedsUpdate(BindingDeclaration declaration, string existing, WindowFieldMember field)
+        {
+            if (field.IsCommand)
+                return false;
+
+            var block = existing.Substring(declaration.Start, declaration.End - declaration.Start);
+            var expectsTwoWay = field.Row.EffectiveMode == UIBindMode.TwoWay;
+            var hasTwoWay = block.IndexOf("TwoWay", StringComparison.Ordinal) >= 0;
+            if (expectsTwoWay != hasTwoWay)
+                return true;
+
+            var format = field.Row.Format;
+            if (string.IsNullOrEmpty(format))
+                return block.IndexOf("Format", StringComparison.Ordinal) >= 0;
+
+            return block.IndexOf("Format", StringComparison.Ordinal) < 0 ||
+                   block.IndexOf(EditorNaming.ToCSharpStringLiteral(format), StringComparison.Ordinal) < 0;
+        }
+
+        /// <summary>
+        /// Rebuilds one generated field declaration with the current Mode/Format while preserving
+        /// hand-written attributes ([Obsolete], [Header], ...), comments and the original indentation.
+        /// The field declaration itself and the generator-owned attributes are rewritten.
+        /// </summary>
+        private static string BuildUpdatedFieldDeclaration(
+            string existing,
+            BindingDeclaration declaration,
+            WindowFieldMember field,
+            string viewName)
+        {
+            var block = existing.Substring(declaration.Start, declaration.End - declaration.Start);
+            var indentMatch = Regex.Match(block, @"(?m)^([ \t]+)\S", RegexOptions.CultureInvariant);
+            var indent = indentMatch.Success ? indentMatch.Groups[1].Value : "    ";
+
+            var preserved = new StringBuilder();
+            var normalized = block.Replace("\r\n", "\n");
+            foreach (var rawLine in normalized.Split('\n'))
+            {
+                var line = rawLine.TrimEnd('\r');
+                var trimmed = line.Trim();
+                if (trimmed.Length == 0)
+                    continue;
+
+                if (trimmed.StartsWith("//", StringComparison.Ordinal) ||
+                    trimmed.StartsWith("/*", StringComparison.Ordinal) ||
+                    trimmed.StartsWith("*", StringComparison.Ordinal))
+                {
+                    preserved.AppendLine(indent + trimmed);
+                    continue;
+                }
+
+                if (!trimmed.StartsWith("[", StringComparison.Ordinal))
+                    continue; // the serialized field declaration is regenerated below
+
+                if (trimmed.IndexOf("UIBindData", StringComparison.Ordinal) >= 0 ||
+                    trimmed.IndexOf("UIBindCommand", StringComparison.Ordinal) >= 0 ||
+                    trimmed.IndexOf("SerializeField", StringComparison.Ordinal) >= 0)
+                {
+                    continue; // generator-owned attributes are rebuilt from the binding table
+                }
+
+                preserved.AppendLine(indent + trimmed);
+            }
+
+            preserved.Append(BuildFieldDeclaration(indent, viewName, field));
+            return preserved.ToString();
+        }
+
+        /// <summary>
+        /// Refreshes the generator-owned Architecture and Level members when the binding table's
+        /// explicit selection changed. User-authored members are untouched; a missing template member
+        /// produces a warning instead of a silent rewrite.
+        /// </summary>
+        private static string UpdateGeneratedWindowMembers(
+            string source,
+            string windowName,
+            string architectureTypeFullName,
+            string level,
+            ICollection<EditorDiagnostic> diagnostics)
+        {
+            var updated = UpdateGeneratedMember(
+                source,
+                @"(?m)^(?<indent>[ \t]*)public\s+override\s+(?:global::)?[A-Za-z_][A-Za-z0-9_.]*\s+GetArchitecture\s*\(\s*\)",
+                indent => BuildArchitectureMember(indent, architectureTypeFullName),
+                "GetArchitecture()",
+                diagnostics);
+            updated = UpdateGeneratedMember(
+                updated,
+                @"(?m)^(?<indent>[ \t]*)public\s+override\s+(?:global::)?[A-Za-z_][A-Za-z0-9_.]*\s+Level\s*(?:=>|\{)",
+                indent => BuildLevelMember(indent, level),
+                "Level",
+                diagnostics);
+            return updated;
+        }
+
+        private static string UpdateGeneratedMember(
+            string source,
+            string pattern,
+            Func<string, string> build,
+            string memberLabel,
+            ICollection<EditorDiagnostic> diagnostics)
+        {
+            var match = Regex.Match(source, pattern, RegexOptions.CultureInvariant);
+            if (!match.Success)
+            {
+                diagnostics.Add(new EditorDiagnostic(
+                    EditorDiagnosticSeverity.Warning,
+                    EditorDiagnosticCodes.InvalidBindingRow,
+                    "The generated window template has no '" + memberLabel + "' member to update; " +
+                    "update the existing source manually or regenerate the file.",
+                    memberLabel));
+                return source;
+            }
+
+            if (!SourceTextMerger.TryFindMemberEnd(source, match.Index + match.Length, out var memberEnd))
+            {
+                diagnostics.Add(new EditorDiagnostic(
+                    EditorDiagnosticSeverity.Warning,
+                    EditorDiagnosticCodes.ExistingSourceNotEditable,
+                    "Could not find the end of the generated '" + memberLabel + "' member; the existing source was left untouched.",
+                    memberLabel));
+                return source;
+            }
+
+            var indent = match.Groups["indent"].Value;
+            var newLine = source.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
+            var replacement = build(indent);
+            if (newLine == "\n")
+                replacement = replacement.Replace("\r\n", "\n");
+
+            var start = SourceTextMerger.GetMemberStartWithDocComment(source, match.Index);
+            var existingMember = source.Substring(start, memberEnd - start);
+            if (NormalizeMemberText(existingMember) == NormalizeMemberText(replacement))
+                return source;
+
+            return source.Substring(0, start) + replacement + source.Substring(memberEnd);
+        }
+
+        private static string NormalizeMemberText(string text)
+        {
+            var normalized = text.Replace("\r\n", "\n").Trim();
+            var lines = normalized.Split('\n');
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var line in lines)
+                builder.Append(line.Trim()).Append('\n');
+            return builder.ToString();
         }
 
         private static string BuildArchitectureMember(string indent, string architectureTypeFullName)

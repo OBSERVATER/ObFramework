@@ -24,6 +24,15 @@ namespace ObFramework.Adapter.Unity.EditorTools
     {
         public const string Title = "OBF UI";
 
+        /// <summary>
+        /// EditorPrefs key for a generation request that must resume after the generated scripts
+        /// compile (the first generation writes the VC source, which only becomes attachable after a
+        /// domain reload). Storing only the small table state keeps the resume path idempotent.
+        /// </summary>
+        public const string PendingGenerationPrefsKey = "ObFramework.UI.PendingGeneration";
+
+        private static bool _resumingPending;
+
         /// <summary>Generates/updates View+VC+contract from the binding table. Returns true when files were written.</summary>
         public static bool Generate(ObfUiTableState state, bool showDialogs)
         {
@@ -109,8 +118,14 @@ namespace ObFramework.Adapter.Unity.EditorTools
                 return false;
             }
 
-            AssignSerializedReferences(state, out var referenceDiagnostics);
+            // Import the generated scripts before touching the Prefab: on first generation the VC
+            // type is only compiled after this refresh (possibly after a domain reload), which is why
+            // reference assignment may have to resume from PendingGenerationPrefsKey.
+            AssetDatabase.Refresh();
+            var needsResume = AssignSerializedReferences(state, allowSchedule: !_resumingPending, out var referenceDiagnostics);
             ObfUiDiagnostics.Log(referenceDiagnostics);
+            if (needsResume)
+                SchedulePendingGeneration(state);
 
             ObfUiBindingTable.Save(state);
             AssetDatabase.SaveAssets();
@@ -127,6 +142,14 @@ namespace ObFramework.Adapter.Unity.EditorTools
                     summary.AppendLine();
                     summary.AppendLine("Serialized reference assignment:");
                     summary.Append(ObfUiDiagnostics.Describe(referenceDiagnostics, 8));
+                }
+
+                if (needsResume)
+                {
+                    summary.AppendLine();
+                    summary.AppendLine("Unity is compiling the generated scripts. The generated window component will be " +
+                                       "attached to the Prefab root and the serialized references assigned automatically " +
+                                       "when compilation finishes (no manual attach or second run required).");
                 }
 
                 EditorUtility.DisplayDialog(Title, summary.ToString(), "OK");
@@ -260,10 +283,11 @@ namespace ObFramework.Adapter.Unity.EditorTools
 
         /// <summary>
         /// Assigns the scanned Prefab component references to the generated serialized fields.
-        /// Safe no-op when the Prefab or the generated window component is not available yet (for
-        /// example first generation before the script is imported/compiled).
+        /// When the generated window component does not exist yet, the script may still be compiling
+        /// (first generation). The method then attaches the component automatically once the type is
+        /// available, or schedules a resume after the next domain reload (returns true).
         /// </summary>
-        public static void AssignSerializedReferences(ObfUiTableState state, out List<EditorDiagnostic> diagnostics)
+        public static bool AssignSerializedReferences(ObfUiTableState state, bool allowSchedule, out List<EditorDiagnostic> diagnostics)
         {
             diagnostics = new List<EditorDiagnostic>();
             if (string.IsNullOrWhiteSpace(state.prefabPath))
@@ -272,7 +296,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
                     EditorDiagnosticSeverity.Info,
                     EditorDiagnosticCodes.MissingPrefabReference,
                     "No Prefab is selected for the binding table; serialized references were not assigned."));
-                return;
+                return false;
             }
 
             var prefabPath = state.prefabPath.Replace('\\', '/');
@@ -284,7 +308,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
                     EditorDiagnosticCodes.InvalidPrefabPath,
                     "Prefab '" + prefabPath + "' could not be loaded; serialized references were not assigned.",
                     prefabPath));
-                return;
+                return false;
             }
 
             var contents = PrefabUtility.LoadPrefabContents(prefabPath);
@@ -295,7 +319,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
                     EditorDiagnosticCodes.InvalidPrefabPath,
                     "Prefab contents for '" + prefabPath + "' could not be loaded.",
                     prefabPath));
-                return;
+                return false;
             }
 
             try
@@ -303,13 +327,37 @@ namespace ObFramework.Adapter.Unity.EditorTools
                 var windowComponent = FindWindowComponent(contents, state.windowName);
                 if (windowComponent == null)
                 {
-                    diagnostics.Add(new EditorDiagnostic(
-                        EditorDiagnosticSeverity.Warning,
-                        EditorDiagnosticCodes.InvalidBindingRow,
-                        "The generated window component '" + state.windowName + "' is not attached to Prefab '" +
-                        prefabPath + "'. Attach the generated script to the Prefab root and run generation again to assign serialized references.",
-                        prefabPath));
-                    return;
+                    var windowType = FindWindowType(ResolveWindowTypeFullName(state));
+                    if (windowType != null)
+                    {
+                        windowComponent = contents.AddComponent(windowType);
+                        diagnostics.Add(new EditorDiagnostic(
+                            EditorDiagnosticSeverity.Info,
+                            EditorDiagnosticCodes.DestructiveChangeApplied,
+                            "Auto-attached the generated window component '" + windowType.FullName +
+                            "' to the Prefab root before assigning serialized references.",
+                            prefabPath));
+                    }
+                    else if (allowSchedule)
+                    {
+                        diagnostics.Add(new EditorDiagnostic(
+                            EditorDiagnosticSeverity.Info,
+                            EditorDiagnosticCodes.InvalidBindingRow,
+                            "The generated window component '" + state.windowName + "' is not compiled yet. " +
+                            "Generation will attach it and assign the serialized references automatically after Unity compiles the script.",
+                            prefabPath));
+                        return true;
+                    }
+                    else
+                    {
+                        diagnostics.Add(new EditorDiagnostic(
+                            EditorDiagnosticSeverity.Warning,
+                            EditorDiagnosticCodes.InvalidBindingRow,
+                            "The generated window component '" + state.windowName + "' is still not available after the " +
+                            "automatic resume; check the Unity console for compile errors, then run generation again.",
+                            prefabPath));
+                        return false;
+                    }
                 }
 
                 var serialized = new SerializedObject(windowComponent);
@@ -357,6 +405,97 @@ namespace ObFramework.Adapter.Unity.EditorTools
             {
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+
+            return false;
+        }
+
+        private static string ResolveWindowTypeFullName(ObfUiTableState state)
+        {
+            var windowName = string.IsNullOrWhiteSpace(state.windowName) ? "ShopWindow" : state.windowName.Trim();
+            var @namespace = (state.namespaceName ?? string.Empty).Trim();
+            return @namespace.Length == 0 ? windowName : @namespace + "." + windowName;
+        }
+
+        private static Type? FindWindowType(string fullTypeName)
+        {
+            if (string.IsNullOrEmpty(fullTypeName))
+                return null;
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    var type = assembly.GetType(fullTypeName, throwOnError: false);
+                    if (type != null && typeof(Component).IsAssignableFrom(type))
+                        return type;
+                }
+                catch (Exception)
+                {
+                    // A dynamic/partially loaded assembly must not break the generation flow.
+                }
+            }
+
+            return null;
+        }
+
+        private static void SchedulePendingGeneration(ObfUiTableState state)
+        {
+            try
+            {
+                EditorPrefs.SetString(PendingGenerationPrefsKey, JsonUtility.ToJson(state));
+            }
+            catch (Exception error)
+            {
+                Debug.LogWarning("OBF UI: failed to schedule the automatic generation resume: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Resumes a first generation that had to wait for the generated VC script to compile. Runs
+        /// after the next domain reload: the window component now exists, so it is attached to the
+        /// Prefab root and the serialized references are assigned without a manual second run.
+        /// </summary>
+        [InitializeOnLoadMethod]
+        private static void ResumePendingGeneration()
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+                return;
+
+            var json = EditorPrefs.GetString(PendingGenerationPrefsKey, string.Empty);
+            if (string.IsNullOrEmpty(json))
+                return;
+
+            EditorPrefs.DeleteKey(PendingGenerationPrefsKey);
+            ObfUiTableState state;
+            try
+            {
+                state = JsonUtility.FromJson<ObfUiTableState>(json);
+            }
+            catch (Exception error)
+            {
+                Debug.LogWarning("OBF UI: pending generation state could not be read: " + error.Message);
+                return;
+            }
+
+            if (state == null)
+                return;
+
+            EditorApplication.delayCall += () =>
+            {
+                _resumingPending = true;
+                try
+                {
+                    Generate(state, showDialogs: false);
+                }
+                catch (Exception error)
+                {
+                    Debug.LogWarning("OBF UI: automatic generation resume failed: " + error);
+                }
+                finally
+                {
+                    _resumingPending = false;
+                }
+            };
         }
 
         private static Component? FindWindowComponent(GameObject root, string windowName)

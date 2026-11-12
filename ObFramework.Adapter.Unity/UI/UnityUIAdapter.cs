@@ -101,6 +101,15 @@ namespace ObFramework.Adapter.Unity.UI
                         "business View. The controller must be a generated [BindView] partial MonoBehaviour and the OBF view binding runtime " +
                         "must be initialized before creating views.");
 
+                // The registry maps one View type per VC. If the generated binding creates a different
+                // View (for example a stale generator output after a View rename), fail here instead of
+                // letting UIManager show a window whose View type does not match the request.
+                if (view.GetType() != registration.ViewType)
+                    throw new InvalidOperationException(
+                        $"Unity controller '{window.GetType().FullName}' (resource '{registration.ResourceKey}') created business View " +
+                        $"'{view.GetType().FullName}', but the adapter registered '{registration.ViewType.FullName}'. Regenerate the binding data " +
+                        "so the [BindView] View type and the adapter registration agree.");
+
                 // Force the clone inactive before reparenting: a prefab root whose activeSelf is true
                 // would otherwise become active in the hierarchy under the active level root and fire
                 // Awake/OnEnable (and therefore the generated display bindings) before UIManager runs

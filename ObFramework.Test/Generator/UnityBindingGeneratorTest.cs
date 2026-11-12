@@ -482,4 +482,161 @@ public class UnityBindingGeneratorTest
         Assert.That(UnityBindingTestHarness.FormatDiagnostics(compilation.GeneratorDiagnostics), Is.Empty);
         UnityBindingTestHarness.RunExercise(compilation, "UnityBindingValueSample.Exercise");
     }
+
+    private const string ParameterizedCanExecuteSource = """
+        using System;
+        using ObFramework.Adapter.Unity.ViewBinding;
+        using ObFramework.Core;
+        using ObFramework.Integrated.UI;
+        using UnityEngine;
+
+        namespace UnityBindingCanExecuteSample
+        {
+            public interface ICanExecuteView { }
+
+            public sealed class CanExecuteArchitecture : AArchitecture<CanExecuteArchitecture>
+            {
+                protected override void Init() { }
+            }
+
+            public partial class CanExecuteView : AUIView
+            {
+                [ObservableProperty] private int m__state = 7;
+                [ObservableProperty] private bool _toggle = true;
+                public int ToggleCount;
+                public int AmountCount;
+
+                public bool CanToggleFlag(bool value) => value;
+
+                [RelayCommand(CanExecute = nameof(CanToggleFlag))]
+                private void ToggleFlag(bool value) { ToggleCount++; }
+
+                public bool CanAmount(double value) => value > 0.5;
+
+                [RelayCommand(CanExecute = nameof(CanAmount))]
+                private void Adjust(float value) { AmountCount++; }
+            }
+
+            [BindView(typeof(CanExecuteView), typeof(ICanExecuteView))]
+            public partial class CanExecuteController : MonoBehaviour, ICanExecuteView
+            {
+                [UIBindData(nameof(CanExecuteView.State))]
+                public TMPro.TMP_Text StateText;
+
+                [UIBindData(nameof(CanExecuteView.Toggle))]
+                public UnityEngine.UI.Toggle ToggleData;
+
+                [UIBindCommand(nameof(CanExecuteView.ToggleFlagCommand))]
+                public UnityEngine.UI.Toggle ToggleCommand;
+
+                [UIBindCommand(nameof(CanExecuteView.AdjustCommand))]
+                public UnityEngine.UI.Slider AmountSlider;
+            }
+
+            public static class Exercise
+            {
+                public static bool Run()
+                {
+                    var architecture = CanExecuteArchitecture.Interface;
+                    try
+                    {
+                        var toggle = new UnityEngine.UI.Toggle();
+                        var controller = new CanExecuteController
+                        {
+                            StateText = new TMPro.TMP_Text(),
+                            ToggleData = toggle,
+                            ToggleCommand = toggle,
+                            AmountSlider = new UnityEngine.UI.Slider(),
+                        };
+                        var view = (CanExecuteView)((IGeneratedViewBinding)controller).CreateView(architecture);
+                        ((ICanSetArchitecture)view).SetArchitecture(architecture);
+
+                        Require(controller.StateText.text == "7", "both generators must agree that m__state declares State");
+                        Require(controller.ToggleCommand.interactable,
+                            "parameterized CanExecute refresh must use the control's current Toggle value, not a default");
+                        Require(view.ToggleCount == 0,
+                            "a programmatic data refresh of the same control must not dispatch the command");
+                        Require(controller.AmountSlider.interactable == false,
+                            "float event value must be evaluated against CanExecute(double) without an InvalidCastException");
+
+                        controller.ToggleData.isOn = false;
+                        Require(view.ToggleCount == 0, "a CanExecute=false Toggle interaction must not dispatch the command");
+                        controller.ToggleData.isOn = true;
+                        Require(view.ToggleCount == 1, "a user Toggle interaction must dispatch the command exactly once");
+
+                        controller.AmountSlider.value = 2.6f;
+                        Require(view.AmountCount == 1, "a Slider float value must dispatch the command");
+                        Require(GeneratedUIBindingRuntime.Errors.Count == 0, "no binding handler may report an exception");
+                        return true;
+                    }
+                    finally
+                    {
+                        architecture.Deinit();
+                    }
+                }
+
+                private static void Require(bool condition, string message)
+                {
+                    if (!condition)
+                        throw new InvalidOperationException(message);
+                }
+            }
+        }
+        """;
+
+    [Test]
+    public void ParameterizedCanExecuteUsesCurrentControlValueAndGuardsProgrammaticRefresh()
+    {
+        var compilation = UnityBindingTestHarness.Compile(ParameterizedCanExecuteSource);
+        Assert.That(UnityBindingTestHarness.FormatDiagnostics(compilation.GeneratorDiagnostics), Is.Empty);
+        UnityBindingTestHarness.RunExercise(compilation, "UnityBindingCanExecuteSample.Exercise");
+    }
+
+    private const string PlainArchitectureCommandSource = """
+        using ObFramework.Adapter.Unity.ViewBinding;
+        using ObFramework.Core;
+        using ObFramework.Integrated.UI;
+        using UnityEngine;
+
+        namespace UnityBindingRejectSample
+        {
+            public interface IRejectView { }
+
+            public sealed class RejectArchitecture : AArchitecture<RejectArchitecture>
+            {
+                protected override void Init() { }
+            }
+
+            public partial class RejectView : AUIView
+            {
+                public sealed class ClickCommand : ACommand
+                {
+                    public override void Execute() { }
+                }
+            }
+
+            [BindView(typeof(RejectView), typeof(IRejectView))]
+            public partial class RejectController : MonoBehaviour, IRejectView
+            {
+                [UIBindCommand(nameof(RejectView.ClickCommand))]
+                public UnityEngine.UI.Button ClickButton;
+            }
+        }
+        """;
+
+    [Test]
+    public void PlainArchitectureCommandIsRejectedWithADispatchContractDiagnostic()
+    {
+        // ACommand is dispatchable by the architecture but is not a UI command: the generated
+        // binding cannot send it through UIPlugin. The planner must reject it with a clear
+        // diagnostic instead of emitting code that fails to compile (CS1503).
+        var compilation = UnityBindingTestHarness.Generate(PlainArchitectureCommandSource, emit: false);
+        var diagnostics = UnityBindingTestHarness.FormatDiagnostics(compilation.GeneratorDiagnostics);
+
+        Assert.That(diagnostics, Does.Contain("AUICommand"), diagnostics);
+        Assert.That(
+            compilation.GeneratedHintNames.SingleOrDefault(name => name.EndsWith(".UIBinding.g.cs", StringComparison.Ordinal)),
+            Is.Null,
+            "no binding partial may be emitted for a non-dispatchable hand-written command");
+    }
 }

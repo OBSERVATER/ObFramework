@@ -26,6 +26,10 @@ namespace ObFramework.Adapter.Unity.EditorTools
         public const string DefaultNamespace = "Game.Generated.UI";
 
         private const string BindViewAttributeFullName = "ObFramework.Adapter.Unity.ViewBinding.BindViewAttribute";
+        // Reflection-based base-type checks (the Editor asmdef does not reference the runtime adapter
+        // assemblies); these names are part of the deployed framework contract.
+        private const string WindowBaseTypeFullName = "ObFramework.Integrated.UI.AUIWindow";
+        private const string ViewBaseTypeFullName = "ObFramework.Integrated.UI.AUIView";
         private const string UIBindDataAttributeFullName = "ObFramework.Adapter.Unity.ViewBinding.UIBindDataAttribute";
         private const string UIBindCommandAttributeFullName = "ObFramework.Adapter.Unity.ViewBinding.UIBindCommandAttribute";
 
@@ -169,6 +173,12 @@ namespace ObFramework.Adapter.Unity.EditorTools
                 if (bindView == null)
                     continue;
 
+                // Only window VCs belong in the static registry: child/reusable components also carry
+                // [BindView] for their own business View, but they are not opened by UIPlugin and must
+                // not be registered as windows.
+                if (!DerivesFromNamed(type, WindowBaseTypeFullName))
+                    continue;
+
                 if (bindView.ConstructorArguments.Count != 2 ||
                     !(bindView.ConstructorArguments[0].Value is Type viewType) ||
                     !(bindView.ConstructorArguments[1].Value is Type contractType))
@@ -181,12 +191,13 @@ namespace ObFramework.Adapter.Unity.EditorTools
                     continue;
                 }
 
-                if (!viewType.IsClass || viewType.IsAbstract)
+                if (!viewType.IsClass || viewType.IsAbstract || !DerivesFromNamed(viewType, ViewBaseTypeFullName))
                 {
                     diagnostics.Add(new EditorDiagnostic(
                         EditorDiagnosticSeverity.Error,
                         EditorDiagnosticCodes.InvalidRegistryEntry,
-                        "'" + type.FullName + "' binds invalid business View type '" + viewType.FullName + "'.",
+                        "'" + type.FullName + "' binds invalid business View type '" + viewType.FullName +
+                        "' (a window VC must bind an AUIView-derived business View).",
                         type.FullName ?? type.Name));
                     continue;
                 }
@@ -296,6 +307,18 @@ namespace ObFramework.Adapter.Unity.EditorTools
         {
             var split = qualifiedName.LastIndexOf('.');
             return split < 0 ? qualifiedName : qualifiedName.Substring(split + 1);
+        }
+
+        /// <summary>True when <paramref name="type"/> or a base type has the fully qualified name.</summary>
+        private static bool DerivesFromNamed(Type? type, string fullName)
+        {
+            for (var current = type; current != null; current = current.BaseType)
+            {
+                if (string.Equals(current.FullName, fullName, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

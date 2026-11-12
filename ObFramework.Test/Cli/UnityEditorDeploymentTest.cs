@@ -394,5 +394,56 @@ namespace ObFramework.Test.Cli
             Assert.That(manifest.TargetRoot, Is.EqualTo("Assets/ObFramework/Editor"));
             Assert.That(manifest.ManifestPath, Is.EqualTo(DeploymentManifest.DefaultOwnedManifestPath));
         }
+
+        [Test]
+        public void EmbeddedPayload_DeployUpdateRemoveRoundTripsWithAnalyzers()
+        {
+            // This is the end-to-end lock for the real CLI payload: deploy, idempotent re-deploy and
+            // remove must all operate on the embedded EditorDeploy + analyzer resources, while user
+            // content is preserved. (Unity import itself remains sample-project validation.)
+            var source = EmbeddedDeployableFileSource.CreateDefault();
+            var payload = source.ListFiles();
+            Assert.That(payload, Is.Not.Empty, "The CLI must embed the Unity tooling payload.");
+            Assert.That(payload, Has.Member("Analyzers/ObFramework.Generator.dll"));
+            Assert.That(payload, Has.Member("Analyzers/ObFramework.Generator.Unity.dll"));
+
+            using var context = new DeploymentTestContext();
+            const string userFile = "Assets/Scripts/Game.cs";
+            context.WriteProjectText(userFile, "// user content");
+            var deployer = new UnityEditorDeployer(source, DeploymentManifest.LoadEmbeddedPlan());
+
+            var first = deployer.Deploy(context.ProjectDirectory);
+            Assert.That(first.InstalledCount, Is.EqualTo(payload.Count), first.Summary);
+            Assert.That(first.Warnings, Is.Empty, string.Join("; ", first.Warnings));
+            Assert.That(
+                context.ProjectFileExists("Assets/ObFramework/Analyzers/ObFramework.Generator.dll"),
+                Is.True);
+            Assert.That(
+                context.ProjectFileExists("Assets/ObFramework/Analyzers/ObFramework.Generator.Unity.dll"),
+                Is.True);
+            Assert.That(
+                context.ProjectFileExists("Assets/ObFramework/Analyzers/ObFramework.Generator.dll.meta"),
+                Is.True);
+            Assert.That(
+                context.ProjectFileExists("Assets/ObFramework/Editor/ObFramework.Adapter.Unity.Editor.asmdef"),
+                Is.True);
+
+            var owned = context.LoadOwnedManifest();
+            Assert.That(owned, Is.Not.Null);
+            Assert.That(owned!.Files.Count, Is.EqualTo(payload.Count));
+
+            var second = deployer.Deploy(context.ProjectDirectory);
+            Assert.That(second.InstalledCount, Is.Zero);
+            Assert.That(second.UpdatedCount, Is.Zero);
+            Assert.That(second.UnchangedCount, Is.EqualTo(payload.Count));
+            Assert.That(second.HasChanges, Is.False);
+
+            var removed = deployer.Remove(context.ProjectDirectory);
+            Assert.That(removed.RemovedCount, Is.EqualTo(payload.Count), removed.Summary);
+            Assert.That(context.ProjectFileExists("Assets/ObFramework/Analyzers/ObFramework.Generator.dll"), Is.False);
+            Assert.That(context.ProjectFileExists("Assets/ObFramework/Editor/ObFramework.Adapter.Unity.Editor.asmdef"), Is.False);
+            Assert.That(context.OwnedManifestExists, Is.False);
+            Assert.That(context.ReadProjectText(userFile), Is.EqualTo("// user content"));
+        }
     }
 }

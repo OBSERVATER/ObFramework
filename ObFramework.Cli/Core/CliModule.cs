@@ -1,8 +1,6 @@
 ﻿using ObFramework.Cli.Commands;
+using ObFramework.Cli.Commands.Reference;
 using Spectre.Console.Cli;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace ObFramework.Cli.Core
 {
@@ -48,13 +46,16 @@ namespace ObFramework.Cli.Core
                 config.AddCommand<DiagnosticsCommand>("diagnostics")
                     .WithDescription("something about diagnostics and log")
                     .WithData(_session);
+                
+                config.AddCommand<ReferenceCommand>("reference")
+                    .WithDescription("references among systems and models")
+                    .WithData(_session);
             });
 
             _initialized = true;
         }
 
-        public void InjectCommand<T>(string name)
-            where T : class, ICommand
+        public void InjectCommand<T>(string name) where T : class, ICommand
         {
             if (!_initialized || _started)
                 throw new InvalidOperationException("Commands can only be registered during initialization.");

@@ -114,6 +114,12 @@ public sealed class TestUIAdapter : IUIAdapter, IDisposable
     public EUILevel Level = EUILevel.Common;
     public ObFramework.Integrated.Resource.ResourcePlugin? Assets;
 
+    /// <summary>
+    /// Test hook for a broken adapter/binding pairing: returns a different View than the requested
+    /// type so UIManager-level mismatch validation can be exercised without a second adapter class.
+    /// </summary>
+    public Func<Type, AUIView>? OverrideViewFactory;
+
     public TaskCompletionSource<bool> Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource<bool> Complete = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -145,7 +151,7 @@ public sealed class TestUIAdapter : IUIAdapter, IDisposable
             throw new InvalidOperationException($"No factory registered for {viewType.Name}.");
 
         var window = new TestWindow(Level, viewType.Name);
-        var view = factory(window);
+        var view = OverrideViewFactory != null ? OverrideViewFactory(viewType) : factory(window);
         _views.Add(window, view);
         _windows.Add(view, window);
         Created.Add((viewType, window, view));

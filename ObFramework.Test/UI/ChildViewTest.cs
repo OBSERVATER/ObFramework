@@ -255,6 +255,27 @@ public class ChildViewTest
         Assert.That(childManagerTypes, Is.Empty);
     }
 
+    [Test]
+    public void BindingLayerInitializesAChildViewExactlyOnceBeforeItsFirstBind()
+    {
+        // Unity ViewBinding constructs child Views directly (no UIManager entry), so the binding
+        // layer must run OnInit once at creation; repeated RefreshBindings must not run it again.
+        var child = new BindableChildView();
+        Assert.That(child.IsInitialized, Is.False);
+
+        child.InitView(null);
+        Assert.That(child.IsInitialized, Is.True);
+        Assert.That(child.CountOf("init"), Is.EqualTo(1));
+
+        child.InitView(null);
+        Assert.That(child.CountOf("init"), Is.EqualTo(1), "binding refresh must not re-run OnInit");
+
+        child.Bind(new ChildData("after-init"));
+        Assert.That(child.CountOf("init"), Is.EqualTo(1));
+        Assert.That(child.CountOf("bind"), Is.EqualTo(1));
+        Assert.That(child.Title, Is.EqualTo("after-init"));
+    }
+
     private static bool ThrowsOnBind(AUIView view)
     {
         try

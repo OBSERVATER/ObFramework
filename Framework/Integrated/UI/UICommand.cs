@@ -102,20 +102,40 @@ namespace ObFramework.Integrated.UI
         {
             if (!CanExecute())
                 return;
-            if (!View.TryBeginCommandExecution(CommandName, AllowConcurrentExecutions))
-                return;
 
+            // Register cancellation BEFORE publishing the Running state: a display subscriber may
+            // close the window synchronously while the start notification runs, and that close must
+            // still be able to request cooperative cancellation of this execution.
             CancellationTokenSource? linked = null;
+            var token = ct;
+            if (CancelOnClose)
+            {
+                linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                View.RegisterCommandCancellation(CommandName, linked);
+                token = linked.Token;
+            }
+
             try
             {
-                var token = ct;
-                if (CancelOnClose)
+                if (!View.TryBeginCommandExecution(CommandName, AllowConcurrentExecutions))
                 {
-                    linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    View.RegisterCommandCancellation(CommandName, linked);
-                    token = linked.Token;
+                    if (linked != null)
+                        View.ReleaseCommandCancellation(linked);
+                    return;
                 }
+            }
+            catch
+            {
+                if (linked != null)
+                    View.ReleaseCommandCancellation(linked);
+                throw;
+            }
 
+            try
+            {
+                // The window may have been closed by a start-state subscriber; do not start business
+                // work with an already-cancelled token.
+                token.ThrowIfCancellationRequested();
                 await ExecuteCore(token).ConfigureAwait(false);
             }
             finally

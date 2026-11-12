@@ -178,10 +178,8 @@ namespace ObFramework.Test.Cli
             // ObFramework.Cli.csproj. Without it, MSBuild moves every *.cs.meta into a satellite
             // assembly and the main payload silently loses them (ob unity deploy then installs an
             // incomplete Editor metadata set).
-            var source = EmbeddedDeployableFileSource.CreateDefault();
+            var source = RequireEmbeddedPayload();
             var files = source.ListFiles();
-            if (files.Count == 0)
-                return; // payload not embedded in this build configuration (EditorDeploy absent)
 
             var metaFiles = files
                 .Where(static file => file.EndsWith(".cs.meta", StringComparison.OrdinalIgnoreCase))
@@ -196,25 +194,69 @@ namespace ObFramework.Test.Cli
         }
 
         [Test]
-        public void EmbeddedPayload_ContainsUnityRoslynAnalyzerAndImportMeta()
+        public void EmbeddedPayload_ContainsBothRoslynAnalyzersAndImportMetas()
         {
-            // The Unity Roslyn source generator is part of the deployable Editor tooling: the CLI
-            // embeds the built ObFramework.Generator.Unity.dll plus a .meta carrying the
-            // RoslynAnalyzer label, so `ob unity deploy` installs it without a manual copy step.
-            var source = EmbeddedDeployableFileSource.CreateDefault();
+            // Both Roslyn source generators are part of the deployable Unity tooling: CDE generates
+            // ObservableProperty/RelayCommand members, the Unity generator generates the VC
+            // factory/binding partial. Each ships with a .meta carrying the RoslynAnalyzer label so
+            // `ob unity deploy` installs them without a manual copy step.
+            var source = RequireEmbeddedPayload();
             var files = source.ListFiles();
-            if (files.Count == 0)
-                return; // payload not embedded in this build configuration (EditorDeploy absent)
 
-            Assert.That(files, Does.Contain("ObFramework.Generator.Unity.dll"));
-            Assert.That(files, Does.Contain("ObFramework.Generator.Unity.dll.meta"));
+            foreach (var name in new[] { "ObFramework.Generator", "ObFramework.Generator.Unity" })
+            {
+                var dll = $"Analyzers/{name}.dll";
+                var meta = $"{dll}.meta";
+                Assert.That(files, Does.Contain(dll), name);
+                Assert.That(files, Does.Contain(meta), name);
 
-            Assert.That(source.TryRead("ObFramework.Generator.Unity.dll", out var assemblyBytes), Is.True);
-            Assert.That(assemblyBytes.Length, Is.GreaterThan(0));
+                Assert.That(source.TryRead(dll, out var assemblyBytes), Is.True, dll);
+                Assert.That(assemblyBytes.Length, Is.GreaterThan(0), dll);
 
-            Assert.That(source.TryRead("ObFramework.Generator.Unity.dll.meta", out var metaBytes), Is.True);
-            var meta = System.Text.Encoding.UTF8.GetString(metaBytes);
-            Assert.That(meta, Does.Contain("RoslynAnalyzer"));
+                Assert.That(source.TryRead(meta, out var metaBytes), Is.True, meta);
+                var metaText = System.Text.Encoding.UTF8.GetString(metaBytes);
+                Assert.That(metaText, Does.Contain("RoslynAnalyzer"), name);
+                // The analyzer must not be imported as a Unity plugin: platforms stay disabled.
+                Assert.That(metaText, Does.Not.Contain("enabled: 1"), name);
+            }
+        }
+
+        [Test]
+        public void EmbeddedPlan_DeploysAnalyzersOutsideTheEditorOnlyToolFolder()
+        {
+            // Unity analyzer scope follows the folder/assembly definition an analyzer lives in.
+            // Analyzers under the Editor-only asmdef folder only analyze Editor assemblies, so the
+            // deployment plan must map them to Assets/ObFramework/Analyzers (outside Editor/).
+            var manifest = DeploymentManifest.LoadEmbeddedPlan();
+            var source = RequireEmbeddedPayload();
+            var resolved = manifest.ResolveFiles(source);
+
+            var analyzers = resolved
+                .Where(static file => file.Kind == "roslyn-analyzer")
+                .ToArray();
+            Assert.That(analyzers, Has.Length.EqualTo(2), "both generators must be deployed as analyzers");
+
+            foreach (var analyzer in analyzers)
+            {
+                Assert.That(
+                    analyzer.Target,
+                    Does.StartWith("Assets/ObFramework/Analyzers/"),
+                    analyzer.Target);
+                Assert.That(
+                    analyzer.Target,
+                    Does.Not.StartWith("Assets/ObFramework/Editor/"),
+                    analyzer.Target);
+                Assert.That(source.TryRead(analyzer.Source, out var content), Is.True, analyzer.Source);
+                Assert.That(content.Length, Is.GreaterThan(0), analyzer.Source);
+            }
+
+            var metas = resolved
+                .Where(static file => file.Source.StartsWith("Analyzers/", StringComparison.Ordinal) &&
+                                      file.Source.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            Assert.That(metas, Has.Length.EqualTo(2));
+            foreach (var meta in metas)
+                Assert.That(meta.Target, Does.StartWith("Assets/ObFramework/Analyzers/"), meta.Target);
         }
 
         [Test]
@@ -241,6 +283,21 @@ namespace ObFramework.Test.Cli
             Assert.That(context.ProjectFileExists("Assets/ObFramework/Editor/Editor/Notes.txt"), Is.True);
             Assert.That(context.ProjectFileExists("Assets/ObFramework/Editor/README.md"), Is.False);
             Assert.That(context.ProjectFileExists("Assets/ObFramework/Editor/docs/Guide.md"), Is.False);
+        }
+
+        /// <summary>
+        /// The deployable payload only exists when the CLI project was built with its EditorDeploy
+        /// resources; tests that exercise it must fail loudly instead of silently returning when it
+        /// is absent (a vacuous pass would hide a broken packaging change).
+        /// </summary>
+        private static IDeployableFileSource RequireEmbeddedPayload()
+        {
+            var source = EmbeddedDeployableFileSource.CreateDefault();
+            Assert.That(
+                source.ListFiles(),
+                Is.Not.Empty,
+                "The Unity Editor deployable payload is not embedded in ObFramework.Cli; build the CLI project before running the CLI tests.");
+            return source;
         }
     }
 }

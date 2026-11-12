@@ -200,10 +200,11 @@ namespace ObFramework.Integrated.UI
             if (string.IsNullOrEmpty(commandName))
                 throw new ArgumentException("Command name is required.", nameof(commandName));
 
+            CommandExecutionState execution;
             bool changed;
             lock (_commandGate)
             {
-                var execution = GetOrCreateExecution(commandName);
+                execution = GetOrCreateExecution(commandName);
                 if (!allowConcurrent && execution.Running)
                     return false;
 
@@ -211,8 +212,24 @@ namespace ObFramework.Integrated.UI
                 changed = execution.RunningCount == 1;
             }
 
-            if (changed)
+            if (!changed)
+                return true;
+
+            try
+            {
                 NotifyCommandStateChanged(commandName);
+            }
+            catch
+            {
+                // A display subscriber threw while the command was starting. Restore the Running
+                // state so the command is not blocked forever, then surface the binding error.
+                lock (_commandGate)
+                    execution.RunningCount--;
+                if (execution.RunningCount < 0)
+                    execution.RunningCount = 0;
+                throw;
+            }
+
             return true;
         }
 
@@ -227,8 +244,18 @@ namespace ObFramework.Integrated.UI
                 changed = execution.RunningCount == 0;
             }
 
-            if (changed)
+            if (!changed)
+                return;
+
+            try
+            {
                 NotifyCommandStateChanged(commandName);
+            }
+            catch
+            {
+                // The command state is already consistent; a display subscriber throwing must not
+                // replace the command's result or mask an exception raised by the business method.
+            }
         }
 
         internal void RegisterCommandCancellation(string commandName, CancellationTokenSource source)

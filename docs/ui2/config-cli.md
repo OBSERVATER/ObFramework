@@ -81,12 +81,13 @@ ob unity deploy <UnityProject> --source <EditorDeploy目录>   # 从本地目录
 
 部署规则：
 
-- 目标是 Unity 可识别的 `Assets/ObFramework/Editor/**` 布局，包含 Editor-only `.cs`、`.asmdef`
-  与 `.meta`，以及 Unity Roslyn Analyzer（`ObFramework.Generator.Unity.dll` + 带
-  `RoslynAnalyzer` 标签的 `.dll.meta`）。部署计划对文件类型做映射（`.cs/.asmdef/.meta` → Editor
-  源码，`.dll` → roslyn-analyzer）；payload 共 47 个文件（45 个 Editor 文件 + Analyzer DLL/meta），
-  dry-run 已验证；Unity Editor 内的实际导入/编译结果仍属示例项目阶段验证项
-  （见 [verification.md](verification.md)）；
+- 目标是 Unity 可识别的布局：`Assets/ObFramework/Editor/**`（Editor-only `.cs`、`.asmdef` 与
+  `.meta`）加上 `Assets/ObFramework/Analyzers/**`（两个 Roslyn Analyzer：
+  `ObFramework.Generator.dll`、`ObFramework.Generator.Unity.dll` 及带 `RoslynAnalyzer` 标签的
+  `.dll.meta`）。Analyzer 放在 Editor-only asmdef 之外，普通游戏程序集同样会被分析。部署计划对文件
+  类型做映射（`.cs/.asmdef/.meta` → Editor 源码，`.dll` → roslyn-analyzer）；payload 共 51 个文件
+  （47 个 Editor 源文件 + 4 个 Analyzer 文件），dry-run 已验证；Unity Editor 内的实际导入/编译结果
+  仍属示例项目阶段验证项（见 [verification.md](verification.md)）；
 - 部署器在 `Assets/ObFramework/obf-deploy.json` 记录自己拥有的文件（含 SHA-256）；
 - 重复 `deploy` 结果稳定；升级只替换部署器拥有的文件；`remove` 只删除它拥有的文件，
   **不会**删除用户的 View/VC 脚本、Prefab、`setup.json`；

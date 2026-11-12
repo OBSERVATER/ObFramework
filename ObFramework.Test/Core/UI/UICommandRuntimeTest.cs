@@ -272,4 +272,73 @@ public class UICommandRuntimeTest
             await host.StopAsync();
         }
     }
+
+    [Test]
+    public async Task StartNotificationFailureRestoresRunningAndAllowsRetry()
+    {
+        var adapter = new TestUIAdapter().Map<CommandView>();
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+            var view = await ui.OpenAsync<CommandView>();
+            var notifications = 0;
+            view!.CommandStateChanged += name =>
+            {
+                if (name != nameof(CommandView.SyncCommand))
+                    return;
+                notifications++;
+                if (notifications == 1)
+                    throw new InvalidOperationException("display binding failed while publishing the Running state");
+            };
+
+            var command = new CommandView.SyncCommand(view);
+            Assert.Throws<InvalidOperationException>(() => command.Execute());
+            Assert.That(view.IsCommandRunning(nameof(CommandView.SyncCommand)), Is.False,
+                "a throwing start notification must not leave the command Running forever");
+            Assert.That(view.Executed, Is.Zero, "business code must not run when the start notification fails");
+
+            command.Execute();
+            Assert.That(view.Executed, Is.EqualTo(1), "the command must be retryable after the binding recovers");
+            Assert.That(view.IsCommandRunning(nameof(CommandView.SyncCommand)), Is.False);
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task ClosingTheWindowDuringTheStartNotificationCancelsTheAsyncCommand()
+    {
+        var adapter = new TestUIAdapter().Map<CommandView>();
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+            var view = await ui.OpenAsync<CommandView>();
+            var closed = false;
+            view!.CommandStateChanged += name =>
+            {
+                if (closed || name != nameof(CommandView.AsyncCommand) || !view.IsCommandRunning(name))
+                    return;
+                closed = true;
+                // A display subscriber may close the window synchronously while Running is published;
+                // cancellation registration happens before the notification, so it must reach the token.
+                ui.Close(view);
+            };
+
+            var command = new CommandView.AsyncCommand(view);
+            var run = command.Execute(CancellationToken.None).AsTask();
+            await Assert.CatchAsync<OperationCanceledException>(async () => await run);
+
+            Assert.That(view.Entered, Is.Zero, "a command cancelled during its start notification must not enter business code");
+            Assert.That(view.IsCommandRunning(nameof(CommandView.AsyncCommand)), Is.False);
+            Assert.That(adapter.ClosedCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
 }

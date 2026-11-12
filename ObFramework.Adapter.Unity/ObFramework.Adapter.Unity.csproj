@@ -4,6 +4,7 @@
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>9</LangVersion>
+        <UnityEditorDataRoot>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed</UnityEditorDataRoot>
     </PropertyGroup>
 
     <!--
@@ -14,16 +15,21 @@
                                       compiled into the runtime assembly.
       * -p:ObfBuildEditorTools=true — a build-only guard that compiles the deployable UnityEditor
                                       glue sources (EditorDeploy/*.cs) against the local Unity
-                                      2022.3 DLLs. It never ships; the same sources are deployed
-                                      into a Unity project by `ob unity deploy` and imported by
+                                      2022.3 DLLs. It never ships (IsPackable=false) and must be
+                                      built into a separate ArtifactsPath when the shared artifacts
+                                      layout is used, so its outputs/intermediates do not mix with
+                                      the runtime build (see build.ps1 / build.sh in the repo root).
+                                      The same sources are deployed into a Unity project by
+                                      `ob unity deploy` and imported by
                                       EditorDeploy/ObFramework.Adapter.Unity.Editor.asmdef.
-                                      Use a separate ArtifactsPath for this mode so its intermediate
-                                      and output files do not mix with the runtime build (see
-                                      artifacts/devbuild/build-all.sh).
+
+      Guard limitation: the Unity Editor asmdef compiles this glue against the deployed runtime
+      adapter assembly, so the glue must only use the adapter's public API. The build mode compiles
+      both together, which cannot catch an accidental internal-type dependency; keep the glue thin.
     -->
     <PropertyGroup Condition="'$(ObfBuildEditorTools)' == 'true'">
         <AssemblyName>ObFramework.Adapter.Unity.EditorTools</AssemblyName>
-        <RootNamespace>ObFramework.Adapter.Unity.EditorTools</RootNamespace>
+        <IsPackable>false</IsPackable>
         <NoWarn>$(NoWarn);MSB3277;MSB3270;CS1701;CS1702</NoWarn>
         <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
     </PropertyGroup>
@@ -31,8 +37,6 @@
     <ItemGroup>
       <ProjectReference Include="..\Framework\ObFramework.csproj" />
       <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" />
-      <ProjectReference Condition="'$(ObfBuildEditorTools)' == 'true'"
-                        Include="..\ObFramework.Editor.Core\ObFramework.Editor.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -43,19 +47,24 @@
         <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.ResourceManager.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine">
-        <HintPath>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed\UnityEngine\UnityEngine.dll</HintPath>
+        <HintPath>$(UnityEditorDataRoot)\UnityEngine\UnityEngine.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.CoreModule">
-        <HintPath>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed\UnityEngine\UnityEngine.CoreModule.dll</HintPath>
+        <HintPath>$(UnityEditorDataRoot)\UnityEngine\UnityEngine.CoreModule.dll</HintPath>
       </Reference>
     </ItemGroup>
 
-    <PropertyGroup>
-        <UnityEditorDataRoot>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed</UnityEditorDataRoot>
-    </PropertyGroup>
+    <ItemGroup>
+      <Compile Remove="EditorDeploy/**/*.cs" />
+      <Folder Include="Asset\" />
+    </ItemGroup>
 
-    <!-- Extra assemblies needed only when compiling the deployable Editor tooling sources. -->
+    <!-- Editor-tools compile validation: glue sources + editor-only Unity assemblies. The runtime
+         adapter sources are compiled by the default mode above; both modes share the same source
+         tree, which is the point of merging the former ObFramework.Adapter.Unity.Editor project. -->
     <ItemGroup Condition="'$(ObfBuildEditorTools)' == 'true'">
+        <ProjectReference Include="..\ObFramework.Editor.Core\ObFramework.Editor.Core.csproj" />
+        <Compile Include="EditorDeploy/*.cs" />
         <Reference Include="UnityEngine.IMGUIModule">
             <HintPath>$(UnityEditorDataRoot)\UnityEngine\UnityEngine.IMGUIModule.dll</HintPath>
             <Private>false</Private>
@@ -71,12 +80,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Compile Remove="EditorDeploy/**/*.cs" />
-      <Compile Condition="'$(ObfBuildEditorTools)' == 'true'" Include="EditorDeploy/*.cs" />
-      <Folder Include="Asset\" />
-    </ItemGroup>
-
-    <ItemGroup>
       <None Remove="Asset\UIRoot.prefab" />
       <EmbeddedResource Include="Asset\UIRoot.prefab">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -88,8 +91,9 @@
     </ItemGroup>
 
     <!-- The Adapter NuGet package carries the deployable Unity Editor resources as content files,
-         so an installed package (not only the CLI tool package) can provide them for inspection. -->
-    <ItemGroup Condition="'$(ObfBuildEditorTools)' != 'true'">
+         so an installed package also provides them for inspection (the CLI reads its own embedded
+         copy; do not deploy both copies into the same Unity project). -->
+    <ItemGroup>
       <None Include="EditorDeploy/**/*"
             Pack="true"
             WithCulture="false"

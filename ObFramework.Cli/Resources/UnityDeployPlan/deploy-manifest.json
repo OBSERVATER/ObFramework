@@ -10,5 +10,30 @@
     "**/*.md",
     "docs/**"
   ],
-  "files": []
+  "files": [
+    {
+      "source": "Analyzers/ObFramework.Generator.dll",
+      "target": "Assets/ObFramework/Analyzers/ObFramework.Generator.dll",
+      "kind": "roslyn-analyzer",
+      "description": "CDE + Save Roslyn source generator (analyzes game assemblies)"
+    },
+    {
+      "source": "Analyzers/ObFramework.Generator.dll.meta",
+      "target": "Assets/ObFramework/Analyzers/ObFramework.Generator.dll.meta",
+      "kind": "meta",
+      "description": "RoslynAnalyzer import settings for the CDE generator"
+    },
+    {
+      "source": "Analyzers/ObFramework.Generator.Unity.dll",
+      "target": "Assets/ObFramework/Analyzers/ObFramework.Generator.Unity.dll",
+      "kind": "roslyn-analyzer",
+      "description": "Unity ViewBinding/UI binding Roslyn source generator (analyzes game assemblies)"
+    },
+    {
+      "source": "Analyzers/ObFramework.Generator.Unity.dll.meta",
+      "target": "Assets/ObFramework/Analyzers/ObFramework.Generator.Unity.dll.meta",
+      "kind": "meta",
+      "description": "RoslynAnalyzer import settings for the Unity binding generator"
+    }
+  ]
 }

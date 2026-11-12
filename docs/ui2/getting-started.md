@@ -42,12 +42,13 @@ Unity Adapter 通过 NuGet 包分发。安装包后，把 Editor 工具部署进
 ob unity deploy D:/GameProjects/MyGame
 ```
 
-它会把 Editor-only 脚本、`.asmdef/.meta` 以及 Unity Roslyn Analyzer（`ObFramework.Generator.Unity.dll`
-+ 带 `RoslynAnalyzer` 标签的 `.dll.meta`）安装到 `Assets/ObFramework/Editor/**`，并记录在
+它会把 Editor-only 脚本、`.asmdef/.meta` 以及两个 Unity Roslyn Analyzer
+（`ObFramework.Generator.dll`、`ObFramework.Generator.Unity.dll` 与带 `RoslynAnalyzer` 标签的
+`.meta`）安装到 `Assets/ObFramework/Editor/**` 与 `Assets/ObFramework/Analyzers/**`，并记录在
 `Assets/ObFramework/obf-deploy.json`。升级时重新执行 `deploy`，卸载时执行 `ob unity remove`
 （不会删除你的脚本/Prefab/setup.json）。
 
-> 部署 payload 共 47 个文件（45 个 Editor 文件 + Analyzer DLL/meta），dry-run 已验证安装/升级/卸载
+> 部署 payload 共 51 个文件（47 个 Editor 源文件 + 4 个 Analyzer 文件），dry-run 已验证安装/升级/卸载
 > 语义；Unity Editor 内的实际导入与编译结果仍属示例项目阶段验证项（见 [verification.md](verification.md)）。
 
 ## 3. 制作 Prefab
@@ -175,5 +176,10 @@ await ui.CloseAll<ShopView>();
 ## 9. 验证
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File artifacts/devbuild/Test-Obf.ps1
+# Windows（含 Editor 工具编译校验模式 + 测试）
+powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
+# macOS/Linux
+bash build.sh
+# 或直接运行测试
+dotnet test ObFramework.Test/ObFramework.Test.csproj
 ```

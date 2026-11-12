@@ -79,6 +79,61 @@ public class EditorWindowGenerationTest
     }
 
     [Test]
+    public void RegenerationUpdatesModeFormatArchitectureAndLevelAndPreservesHandWrittenAttributes()
+    {
+        const string existing = """
+            namespace Game.UI
+            {
+                [global::ObFramework.Adapter.Unity.ViewBinding.BindView(typeof(ShopView), typeof(IShopContract))]
+                public partial class ShopWindow : global::ObFramework.Adapter.Unity.UI.AUIWindow, IShopContract
+                {
+                    public override global::ObFramework.Core.IArchitecture GetArchitecture()
+                        => global::Game.GameArchitecture.Interface;
+
+                    public override global::ObFramework.Integrated.UI.EUILevel Level
+                        => global::ObFramework.Integrated.UI.EUILevel.Common;
+
+                    /// <summary>User authored engine code must survive regeneration.</summary>
+                    public void PlaySound()
+                    {
+                    }
+
+                    [global::System.Obsolete("legacy control kept by the user")]
+                    [global::UnityEngine.SerializeField]
+                    [global::ObFramework.Adapter.Unity.ViewBinding.UIBindData(nameof(ShopView.Enabled))]
+                    private global::UnityEngine.UI.Toggle enabledToggle;
+                }
+            }
+            """;
+
+        var request = EditorFixtures.Request(
+            EditorFixtures.Row(UIComponentKind.Toggle, "Enabled", "enabledToggle", "Enabled",
+                format: "P0", mode: UIBindMode.TwoWay));
+        request.ExistingWindowSource = existing;
+        request.ArchitectureTypeFullName = "Game.NewArchitecture";
+        request.Level = "Overlay";
+
+        var result = EditorTemplateGenerator.Generate(request);
+
+        Assert.That(result.Success, Is.True, EditorFixtures.FormatDiagnostics(result.Diagnostics));
+        var window = EditorFixtures.File(result, GeneratedFileKind.Window);
+        Assert.That(window.IsModified, Is.True);
+        Assert.That(window.Content, Does.Contain("public void PlaySound()"));
+        Assert.That(window.Content, Does.Contain("[global::System.Obsolete(\"legacy control kept by the user\")]"),
+            "hand-written attributes next to a generated field must be preserved");
+        Assert.That(window.Content, Does.Contain("Mode = global::ObFramework.Adapter.Unity.ViewBinding.UIBindMode.TwoWay"));
+        Assert.That(window.Content, Does.Contain("Format = \"P0\""));
+        Assert.That(window.Content, Does.Not.Contain("GameArchitecture.Interface"),
+            "the selected Architecture must be applied on regeneration");
+        Assert.That(window.Content, Does.Contain("Game.NewArchitecture.Interface"));
+        Assert.That(window.Content, Does.Not.Contain("EUILevel.Common"),
+            "the selected Level must be applied on regeneration");
+        Assert.That(window.Content, Does.Contain("EUILevel.Overlay"));
+        Assert.That(CountOccurrences(window.Content, "enabledToggle"), Is.EqualTo(1),
+            "the field must be updated in place, not duplicated");
+    }
+
+    [Test]
     public void DestructiveRenameIsPreviewedAndOnlyAppliedWhenConfirmed()
     {
         var request = EditorFixtures.Request(

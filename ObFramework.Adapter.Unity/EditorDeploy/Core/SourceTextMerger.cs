@@ -17,6 +17,21 @@ namespace ObFramework.Editor.Core
         public int End;
     }
 
+    /// <summary>Replacement of one source range (used to refresh generated member declarations).</summary>
+    internal readonly struct SourceReplacement
+    {
+        public SourceReplacement(int start, int end, string text)
+        {
+            Start = start;
+            End = end;
+            Text = text ?? string.Empty;
+        }
+
+        public int Start { get; }
+        public int End { get; }
+        public string Text { get; }
+    }
+
     /// <summary>
     /// Conservative, dependency-free C# text helpers for incremental regeneration: locate a class
     /// body, collect already declared member names and parse generated binding field declarations.
@@ -185,6 +200,68 @@ namespace ObFramework.Editor.Core
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>Applies replacements from the end of the file backwards so offsets stay valid.</summary>
+        public static string ReplaceRanges(string source, IReadOnlyList<SourceReplacement> replacements)
+        {
+            if (replacements == null || replacements.Count == 0)
+                return source;
+
+            var ordered = new List<SourceReplacement>(replacements);
+            ordered.Sort((left, right) => right.Start.CompareTo(left.Start));
+            var builder = new StringBuilder(source);
+            foreach (var replacement in ordered)
+            {
+                var start = Math.Max(0, Math.Min(replacement.Start, builder.Length));
+                var end = Math.Max(start, Math.Min(replacement.End, builder.Length));
+                builder.Remove(start, end - start);
+                builder.Insert(start, replacement.Text);
+            }
+
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Finds the end index of the member whose signature starts at <paramref name="signatureStart"/>:
+        /// either the terminating ';' of an expression body or the matching brace of a block body.
+        /// </summary>
+        public static bool TryFindMemberEnd(string source, int signatureStart, out int end)
+        {
+            end = -1;
+            for (var index = Math.Max(0, signatureStart); index < source.Length; index++)
+            {
+                if (source[index] == ';')
+                {
+                    end = index + 1;
+                    return true;
+                }
+
+                if (source[index] == '{')
+                    return TryFindMatchingBrace(source, index, out end);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Starting at the signature line, walks up over contiguous XML doc lines so generated
+        /// members can be refreshed together with their summary.
+        /// </summary>
+        public static int GetMemberStartWithDocComment(string source, int signatureStart)
+        {
+            var lineStart = source.LastIndexOf('\n', Math.Max(0, signatureStart - 1)) + 1;
+            var start = lineStart;
+            while (start > 0)
+            {
+                var previousStart = source.LastIndexOf('\n', start - 2) + 1;
+                var previousLine = source.Substring(previousStart, start - previousStart).Trim();
+                if (!previousLine.StartsWith("///", StringComparison.Ordinal))
+                    break;
+                start = previousStart;
+            }
+
+            return start;
         }
 
         /// <summary>Detects the indentation used by existing class members, for consistent inserted declarations.</summary>

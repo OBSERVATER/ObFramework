@@ -158,39 +158,25 @@ namespace ObFramework.Generator.CDE
         }
 
         /// <summary>
-        /// Derives the generated PascalCase property name from a private field name. Leading
-        /// underscores and a legacy 'm_' prefix are trimmed, then the first character is uppercased.
+        /// Derives the generated PascalCase property name from a private field name. The rule is
+        /// shared with the Unity binding generator through <see cref="SourceRules.CdeSourceRules"/>
+        /// so both generators agree on the same declaration (leading underscores and a legacy 'm_'
+        /// prefix are trimmed, including nested cases such as 'm__state' -> 'State').
         /// </summary>
         internal static string? GetGeneratedPropertyName(IFieldSymbol field)
         {
-            var name = field.Name;
-            var index = 0;
-            while (index < name.Length && name[index] == '_')
-                index++;
-            name = name.Substring(index);
-            if (name.Length > 2 && name[0] == 'm' && name[1] == '_')
-                name = name.Substring(2);
-            index = 0;
-            while (index < name.Length && name[index] == '_')
-                index++;
-            name = name.Substring(index);
-            if (name.Length == 0)
-                return null;
-            name = char.ToUpperInvariant(name[0]) + name.Substring(1);
-            return SyntaxFacts.IsValidIdentifier(name) ? name : null;
+            return SourceRules.CdeSourceRules.GetPropertyName(field.Name);
         }
 
         /// <summary>
         /// Derives the nested command type name from the relay method name; a trailing 'Async'
         /// suffix is dropped before appending 'Command' (Submit/SubmitAsync -> SubmitCommand).
+        /// The rule is shared with the Unity binding generator through
+        /// <see cref="SourceRules.CdeSourceRules"/>.
         /// </summary>
         internal static string GetGeneratedCommandName(IMethodSymbol method)
         {
-            var name = method.Name;
-            const string asyncSuffix = "Async";
-            if (name.Length > asyncSuffix.Length && name.EndsWith(asyncSuffix, StringComparison.Ordinal))
-                name = name.Substring(0, name.Length - asyncSuffix.Length);
-            return name + "Command";
+            return SourceRules.CdeSourceRules.GetCommandTypeName(method.Name);
         }
 
         internal static string EscapeIdentifier(string identifier)

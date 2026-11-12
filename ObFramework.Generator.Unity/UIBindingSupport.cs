@@ -241,7 +241,8 @@ namespace ObFramework.Generator.Unity
             if (result == null)
             {
                 diagnostics.Add(Diagnostic.Create(UIBindingDiagnostics.InvalidDeclaration, location,
-                    $"Hand-written command '{typeName}' must derive from ObFramework.Core.ICommand or ObFramework.Core.IAsyncCommand and expose a public convention constructor."));
+                    $"Hand-written command '{typeName}' must derive from ObFramework.Integrated.UI.AUICommand or AUIAsyncCommand " +
+                    "(and expose a public convention constructor); a plain ICommand implementation cannot be dispatched by the UI plugin."));
                 return null;
             }
 
@@ -252,13 +253,16 @@ namespace ObFramework.Generator.Unity
             INamedTypeSymbol controller)
         {
             var asyncInterface = compilation.GetTypeByMetadataName("ObFramework.Core.IAsyncCommand");
-            var syncInterface = compilation.GetTypeByMetadataName("ObFramework.Core.ICommand");
             var uiCommand = compilation.GetTypeByMetadataName("ObFramework.Integrated.UI.AUICommand");
             var uiAsyncCommand = compilation.GetTypeByMetadataName("ObFramework.Integrated.UI.AUIAsyncCommand");
 
             var isAsync = DerivesFrom(command, asyncInterface) || DerivesFrom(command, uiAsyncCommand);
-            var isSync = DerivesFrom(command, syncInterface) || DerivesFrom(command, uiCommand);
-            if (!isAsync && !isSync)
+            // Generated dispatch can only send framework UI commands (AUICommand/AUIAsyncCommand);
+            // a plain ICommand/IAsyncCommand implementation compiles but cannot be dispatched by
+            // UIPlugin, so reject it here with a clear diagnostic instead of emitting CS1503 code.
+            var isUIAsync = DerivesFrom(command, uiAsyncCommand);
+            var isUISync = !isUIAsync && DerivesFrom(command, uiCommand);
+            if (!isUIAsync && !isUISync)
                 return null;
 
             var view = command.ContainingType;
@@ -269,8 +273,8 @@ namespace ObFramework.Generator.Unity
             {
                 TypeName = command.Name,
                 Generated = false,
-                Async = isAsync && !isSync,
-                IsUICommand = DerivesFrom(command, uiCommand) || DerivesFrom(command, uiAsyncCommand),
+                Async = isUIAsync || isAsync,
+                IsUICommand = true,
             };
 
             foreach (var constructor in command.InstanceConstructors)
@@ -333,22 +337,15 @@ namespace ObFramework.Generator.Unity
 
         internal static string PropertyNameFor(string fieldName)
         {
-            var name = fieldName ?? string.Empty;
-            while (name.Length > 1 && name[0] == '_')
-                name = name.Substring(1);
-            if (name.StartsWith("m_", StringComparison.Ordinal) && name.Length > 2)
-                name = name.Substring(2);
-            if (name.Length == 0 || !char.IsLetter(name[0]))
-                return string.Empty;
-            return char.ToUpperInvariant(name[0]) + name.Substring(1);
+            // Single shared rule with the CDE generator (linked source, see CdeSourceRules) so a
+            // declaration such as `m__state` always generates `State` in both pipelines.
+            return SourceRules.CdeSourceRules.GetPropertyName(fieldName) ?? string.Empty;
         }
 
         internal static string CommandTypeNameFor(string methodName)
         {
-            var name = methodName ?? string.Empty;
-            if (name.Length > "Async".Length && name.EndsWith("Async", StringComparison.Ordinal))
-                name = name.Substring(0, name.Length - "Async".Length);
-            return name + "Command";
+            // Same shared command type rule as the CDE generator (`Save`/`SaveAsync` -> `SaveCommand`).
+            return SourceRules.CdeSourceRules.GetCommandTypeName(methodName);
         }
 
         internal static bool HasAttribute(ISymbol member, INamedTypeSymbol? attribute) =>

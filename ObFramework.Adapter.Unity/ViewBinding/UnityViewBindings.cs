@@ -153,6 +153,26 @@ namespace ObFramework.Adapter.Unity.ViewBinding
                 // injected here so business Views never need a second DI container.
                 if (view is ICanSetArchitecture setter)
                     setter.SetArchitecture(_architecture!);
+
+                // The VC is the window identity; a generated GetArchitecture() that points at a
+                // different architecture than the bootstrapped one would bind a View to the wrong
+                // context and only fail on first use, so reject the pairing immediately.
+                if (controller is IBelongToArchitecture belongs)
+                {
+                    var controllerArchitecture = belongs.GetArchitecture();
+                    if (controllerArchitecture != null && !ReferenceEquals(controllerArchitecture, _architecture))
+                        throw new InvalidOperationException(
+                            $"View controller '{controller.GetType().FullName}' resolves a different architecture than the active " +
+                            "view-binding runtime; generated GetArchitecture() and the bootstrapped architecture must agree.");
+                }
+
+                // Child components are Views created directly by the binding layer, with no UIManager
+                // entry that could run OnInit later; initialize them here exactly once. Window VCs are
+                // initialized by UIManager.InitView (with their open data) and must not be initialized
+                // here with null data.
+                if (!(controller is IUIWindow) && view is AUIView childView)
+                    childView.InitView(null);
+
                 binding.Initialize(view);
                 if (!controller)
                     RemoveAndRelease(binding);

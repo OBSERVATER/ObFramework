@@ -1,4 +1,4 @@
-﻿using ObFramework.Utility.Collection;
+using ObFramework.Utility.Collection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +21,10 @@ namespace ObFramework.Integrated.UI
         private readonly LRUCache<int, UIKey> _cache;
         private readonly Dictionary<Type, List<int>> _idCacheMap = new Dictionary<Type, List<int>>();
         private readonly Stack<UIStackEntry> _stack = new Stack<UIStackEntry>();
+        // Stack<T> is not thread-safe; Push/Pop/Stop may run on different threads. Pop takes the
+        // entry atomically (under this lock) before awaiting the reopen, so concurrent Pops cannot
+        // consume the same navigation entry.
+        private readonly object _stackSync = new object();
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private int _serialId;
         private bool _stopping;
@@ -52,7 +56,8 @@ namespace ObFramework.Integrated.UI
             {
                 var windows = _active.Values.SelectMany(x => x).ToArray();
                 _active.Clear();
-                _stack.Clear();
+                lock (_stackSync)
+                    _stack.Clear();
                 foreach (var key in windows)
                 {
                     try { key.Instance.View.CloseView(); }
@@ -100,6 +105,11 @@ namespace ObFramework.Integrated.UI
                     try
                     {
                         activeKey.Instance.View.OpenView(data);
+                        // OnOpen may close/replace this window synchronously (for example a view that
+                        // redirects or dismisses itself). Only show it again while it is still active.
+                        if (!IsActive(activeKey))
+                            return activeKey.Instance.View;
+
                         _adapter.Open(activeKey.Instance, data);
                     }
                     catch
@@ -109,7 +119,7 @@ namespace ObFramework.Integrated.UI
                         throw;
                     }
 
-                    _active[viewType][^1] = new UIKey(activeKey.ViewType, activeKey.Instance, activeKey.SerialId, activeKey.Mode, data);
+                    UpdateActiveData(activeKey, data);
                     return activeKey.Instance.View;
                 }
 
@@ -124,6 +134,13 @@ namespace ObFramework.Integrated.UI
                 {
                     instance = await _adapter.CreateAsync(viewType, cancellationToken)
                         ?? throw new InvalidOperationException($"Failed to create UI view: {viewType.FullName}");
+                    if (instance.View.GetType() != viewType)
+                    {
+                        _adapter.Release(instance);
+                        throw new InvalidOperationException(
+                            $"UI adapter created '{instance.View.GetType().FullName}' for requested View type " +
+                            $"'{viewType.FullName}'; the adapter registry and the bound business View disagree.");
+                    }
                 }
 
                 var key = new UIKey(viewType, instance, serialId, mode, data);
@@ -136,6 +153,12 @@ namespace ObFramework.Integrated.UI
                     AddActive(key);
                     added = true;
                     instance.View.OpenView(data);
+                    // A view may close itself from OnOpen; then it is already cached/closed and must
+                    // not be activated afterwards (that would leave an invisible close with a visible
+                    // window).
+                    if (!IsActive(key))
+                        return instance.View;
+
                     _adapter.Open(instance, data);
                     return instance.View;
                 }
@@ -279,6 +302,38 @@ namespace ObFramework.Integrated.UI
             return false;
         }
 
+        private bool IsActive(UIKey key)
+        {
+            if (!_active.TryGetValue(key.ViewType, out var list))
+                return false;
+
+            foreach (var item in list)
+            {
+                if (item.SerialId == key.SerialId && ReferenceEquals(item.Instance.View, key.Instance.View))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Refreshes the stored open data after a Single reopen. If the window closed itself during
+        /// OnOpen there is nothing to update anymore.
+        /// </summary>
+        private void UpdateActiveData(UIKey key, IUIData? data)
+        {
+            if (!_active.TryGetValue(key.ViewType, out var list))
+                return;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].SerialId != key.SerialId)
+                    continue;
+                list[i] = new UIKey(key.ViewType, key.Instance, key.SerialId, key.Mode, data);
+                return;
+            }
+        }
+
         #endregion
 
         #region Cache
@@ -371,26 +426,55 @@ namespace ObFramework.Integrated.UI
 
             var entry = new UIStackEntry(key.ViewType, key.Data, key.Mode);
 
-            if (MoveToCache(key))
+            if (!MoveToCache(key))
+                return;
+
+            lock (_stackSync)
                 _stack.Push(entry);
         }
 
         public async Task<T?> Pop<T>() where T : AUIView
         {
             EnsureRunning();
-            if (!_stack.TryPeek(out var entry))
-                return null;
 
-            if (!typeof(T).IsAssignableFrom(entry.ViewType))
-                throw new InvalidOperationException($"Stack top is {entry.ViewType.Name}, not {typeof(T).Name}.");
+            UIStackEntry entry;
+            lock (_stackSync)
+            {
+                if (!_stack.TryPeek(out entry))
+                    return null;
 
-            var view = await OpenAsync(entry.ViewType, entry.Mode, data: entry.Data);
-            if (view == null)
-                return null;
+                if (!typeof(T).IsAssignableFrom(entry.ViewType))
+                    throw new InvalidOperationException($"Stack top is {entry.ViewType.Name}, not {typeof(T).Name}.");
 
-            EnsureRunning();
-            _stack.Pop();
-            return (T)view;
+                // Take the entry atomically before awaiting: concurrent Pops must not consume the
+                // same navigation entry twice.
+                _stack.Pop();
+            }
+
+            try
+            {
+                var view = await OpenAsync(entry.ViewType, entry.Mode, data: entry.Data);
+                if (view == null)
+                {
+                    RestoreStackEntry(entry);
+                    return null;
+                }
+
+                return (T)view;
+            }
+            catch
+            {
+                // Reopening failed (for example during shutdown); put the navigation entry back so a
+                // later Pop can retry instead of silently losing it.
+                RestoreStackEntry(entry);
+                throw;
+            }
+        }
+
+        private void RestoreStackEntry(UIStackEntry entry)
+        {
+            lock (_stackSync)
+                _stack.Push(entry);
         }
 
         #endregion

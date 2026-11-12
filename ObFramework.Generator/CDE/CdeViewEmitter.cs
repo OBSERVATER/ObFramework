@@ -625,15 +625,19 @@ namespace ObFramework.Generator.CDE
             var methodName = CdeSymbols.EscapeIdentifier(canExecute.Method.Name);
             if (canExecute.TakesValue && model.ValueParameter != null)
             {
-                var parameterTypeName = CdeSymbols.DisplayType(canExecute.Method.Parameters[0].Type);
+                // Cast the boxed command value to the VALUE parameter type, not to the CanExecute
+                // parameter type: the latter may be a wider numeric type (`float` event value feeding
+                // `CanExecute(double value)`), and casting the boxed float directly to double throws
+                // InvalidCastException.
+                var valueTypeName = CdeSymbols.DisplayType(model.ValueParameter.Type);
                 builder.Append(inner).AppendLine("protected override bool CanExecuteCore()");
                 builder.Append(inner).AppendLine("{");
-                builder.Append(body).Append("return _view.").Append(methodName).Append("((").Append(parameterTypeName).Append(")Parameter!);").AppendLine();
+                builder.Append(body).Append("return _view.").Append(methodName).Append("((").Append(valueTypeName).Append(")Parameter!);").AppendLine();
                 builder.Append(inner).AppendLine("}");
                 builder.AppendLine();
                 builder.Append(inner).AppendLine("protected override bool CanExecuteCore(object? parameter)");
                 builder.Append(inner).AppendLine("{");
-                builder.Append(body).Append("return _view.").Append(methodName).Append("((").Append(parameterTypeName).Append(")parameter!);").AppendLine();
+                builder.Append(body).Append("return _view.").Append(methodName).Append("((").Append(valueTypeName).Append(")parameter!);").AppendLine();
                 builder.Append(inner).AppendLine("}");
             }
             else

@@ -215,4 +215,127 @@ public class UILifecycleTest
         Assert.That(view.CountOf("destroy"), Is.EqualTo(1));
         Assert.That(adapter.ReleasedCount, Is.EqualTo(1));
     }
+
+    /// <summary>View that closes itself from OnOpen, exercising the manager's reentrancy checks.</summary>
+    public sealed class SelfClosingView : TestView
+    {
+        public static UIPlugin? Ui;
+        public bool CloseOnOpen;
+
+        protected override void OnOpen(IUIData? data)
+        {
+            base.OnOpen(data);
+            if (!CloseOnOpen)
+                return;
+            CloseOnOpen = false;
+            Ui?.Close(this);
+        }
+    }
+
+    [Test]
+    public async Task OnOpenClosingItselfDoesNotActivateTheWindowAfterwards()
+    {
+        SelfClosingView.Ui = null;
+        var adapter = new TestUIAdapter().Map<SelfClosingView>(_ => new SelfClosingView { CloseOnOpen = true });
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+            SelfClosingView.Ui = ui;
+
+            var view = await ui.OpenAsync<SelfClosingView>();
+
+            Assert.That(view, Is.Not.Null);
+            Assert.That(ui.TryGet<SelfClosingView>(out _), Is.False, "a view closed during OnOpen must not stay active");
+            Assert.That(adapter.OpenedCount, Is.Zero, "the adapter must not activate a window that closed itself in OnOpen");
+            Assert.That(adapter.ClosedCount, Is.EqualTo(1));
+            Assert.That(view!.CountOf("open"), Is.EqualTo(1));
+            Assert.That(view.CountOf("close"), Is.EqualTo(1));
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task SingleReopenClosingItselfDuringOnOpenDoesNotThrowOrShowTheWindow()
+    {
+        SelfClosingView.Ui = null;
+        var adapter = new TestUIAdapter().Map<SelfClosingView>();
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+            SelfClosingView.Ui = ui;
+            var view = await ui.OpenAsync<SelfClosingView>();
+            Assert.That(view, Is.Not.Null);
+            Assert.That(adapter.OpenedCount, Is.EqualTo(1));
+
+            view!.CloseOnOpen = true;
+            var reopened = await ui.OpenAsync<SelfClosingView>(EUIOpenMode.Single);
+
+            Assert.That(reopened, Is.SameAs(view));
+            Assert.That(ui.TryGet<SelfClosingView>(out _), Is.False);
+            Assert.That(adapter.OpenedCount, Is.EqualTo(1), "the reopen must not call adapter.Open after OnOpen closed the window");
+            Assert.That(adapter.ClosedCount, Is.EqualTo(1));
+            Assert.That(view.CountOf("open"), Is.EqualTo(2));
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task AdapterReturningADifferentViewTypeIsRejectedBeforeOpening()
+    {
+        // Simulates a broken registry/binding: the requested View type and the View created by the
+        // adapter disagree. The manager must fail before showing a window with a mismatched View.
+        var adapter = new TestUIAdapter().Map<FirstView>();
+        adapter.OverrideViewFactory = _ => new SecondView();
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await ui.OpenAsync<FirstView>());
+
+            Assert.That(adapter.OpenedCount, Is.Zero);
+            Assert.That(adapter.ReleasedCount, Is.EqualTo(1), "the mismatched instance must be released");
+            Assert.That(ui.TryGet<FirstView>(out _), Is.False);
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
+
+    [Test]
+    public async Task ConcurrentPopsConsumeDistinctStackEntries()
+    {
+        var adapter = new TestUIAdapter().Map<FirstView>().Map<SecondView>();
+        var host = await StartAsync(adapter);
+        try
+        {
+            var ui = host.Context.Get<UIPlugin>();
+            var first = await ui.OpenAsync<FirstView>();
+            ui.Push(first!);
+            var second = await ui.OpenAsync<SecondView>();
+            ui.Push(second!);
+
+            var firstPop = ui.Pop<SecondView>();
+            var secondPop = ui.Pop<SecondView>();
+
+            Assert.That(await firstPop, Is.Not.Null);
+            // The first pop consumed the SecondView entry atomically; the second one now sees the
+            // FirstView on top and fails its requested type instead of reopening the same entry again.
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await secondPop);
+            Assert.That(second!.CountOf("open"), Is.EqualTo(2), "the SecondView entry must be reopened exactly once");
+        }
+        finally
+        {
+            await host.StopAsync();
+        }
+    }
 }

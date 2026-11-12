@@ -156,7 +156,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
 
                     var row = new ObfUiTableRow
                     {
-                        componentPath = GetTransformPath(gameObject.transform),
+                        componentPath = GetTransformPath(gameObject.transform, gameObject.transform.root),
                         componentType = typeName,
                         componentOrdinal = ordinal,
                         kind = (int)kind,
@@ -208,13 +208,23 @@ namespace ObFramework.Adapter.Unity.EditorTools
             return result;
         }
 
-        /// <summary>Full path of a Transform below the Prefab/scene root, using '/' separators.</summary>
-        public static string GetTransformPath(Transform transform)
+        /// <summary>
+        /// Relative path of a Transform below the Prefab root (empty for the root), using '/'
+        /// separators. Transform.Find resolves paths relative to the root, so the root name must not
+        /// be part of the stored path.
+        /// </summary>
+        public static string GetTransformPath(Transform transform, Transform? root = null)
         {
-            var builder = new StringBuilder(transform.name);
-            for (var parent = transform.parent; parent != null; parent = parent.parent)
-                builder.Insert(0, "/").Insert(0, parent.name);
-            return builder.ToString();
+            root ??= transform.root;
+            var names = new List<string>();
+            for (var current = transform; current != null; current = current.parent)
+            {
+                if (current == root)
+                    break;
+                names.Insert(0, current.name);
+            }
+
+            return BindingTablePath.CombinePath(names);
         }
 
         /// <summary>Resolves the component for a persisted row inside a Prefab asset, or null.</summary>
@@ -223,8 +233,15 @@ namespace ObFramework.Adapter.Unity.EditorTools
             if (prefabRoot == null || row == null)
                 return null;
 
-            var target = prefabRoot.transform.Find(row.componentPath);
-            if (target == null && row.componentPath == prefabRoot.name)
+            // Stored paths may be legacy absolute paths ("ShopRoot/Buy/Button"); Transform.Find is
+            // relative to the prefab root, so normalize first. If the path is not found directly,
+            // fall back to a hierarchy walk (handles renamed intermediate nodes and older tables)
+            // before giving up with the caller's diagnostic.
+            var relative = BindingTablePath.MakeRelative(row.componentPath, prefabRoot.name);
+            Transform? target = relative.Length == 0 ? prefabRoot.transform : prefabRoot.transform.Find(relative);
+            if (target == null && relative.Length > 0)
+                target = FindByRelativePath(prefabRoot.transform, relative);
+            if (target == null && relative.Length == 0)
                 target = prefabRoot.transform;
             if (target == null)
                 return null;
@@ -249,6 +266,19 @@ namespace ObFramework.Adapter.Unity.EditorTools
             }
 
             return match;
+        }
+
+        private static Transform? FindByRelativePath(Transform root, string relativePath)
+        {
+            foreach (var candidate in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (candidate == null || candidate == root)
+                    continue;
+                if (string.Equals(GetTransformPath(candidate, root), relativePath, StringComparison.Ordinal))
+                    return candidate;
+            }
+
+            return null;
         }
 
         private static string RowIdentity(ObfUiTableRow row)
