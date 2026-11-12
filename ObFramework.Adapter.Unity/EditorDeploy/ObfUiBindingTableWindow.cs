@@ -44,7 +44,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
         /// <summary>Opens the window and adds the supplied components (Used by the component context menu).</summary>
         public static void OpenAndAddComponents(IReadOnlyList<Component>? components)
         {
-            if (components != null && components.Count > 0)
+            if (components is { Count: > 0 })
             {
                 var gameObjects = new List<GameObject>();
                 foreach (var component in components)
@@ -121,8 +121,8 @@ namespace ObFramework.Adapter.Unity.EditorTools
                 else
                 {
                     _state.prefabPath = selected!;
-                    for (var index = 0; index < _state.rows.Length; index++)
-                        _state.rows[index].prefabPath = _state.prefabPath;
+                    foreach (var t in _state.rows)
+                        t.prefabPath = _state.prefabPath;
                 }
             }
 

@@ -74,17 +74,22 @@ namespace ObFramework.Adapter.Unity.EditorTools
                         "Apply changes",
                         "Cancel",
                         "Keep old declarations");
-                    if (choice == 1)
-                        return false;
-                    if (choice == 0)
+                    switch (choice)
                     {
-                        request.ConfirmedDestructiveChangeIds = pending.Select(change => change.Id).ToList();
-                        result = EditorTemplateGenerator.Generate(request);
-                        if (!result.Success)
-                        {
-                            ObfUiDiagnostics.Log(result.Diagnostics);
-                            EditorUtility.DisplayDialog(Title, "Generation failed after confirming changes.", "OK");
+                        case 1:
                             return false;
+                        case 0:
+                        {
+                            request.ConfirmedDestructiveChangeIds = pending.Select(change => change.Id).ToList();
+                            result = EditorTemplateGenerator.Generate(request);
+                            if (!result.Success)
+                            {
+                                ObfUiDiagnostics.Log(result.Diagnostics);
+                                EditorUtility.DisplayDialog(Title, "Generation failed after confirming changes.", "OK");
+                                return false;
+                            }
+
+                            break;
                         }
                     }
                 }

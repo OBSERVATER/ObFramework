@@ -9,7 +9,6 @@ using UnityEngine;
 
 namespace ObFramework.Adapter.Unity.EditorTools
 {
-    /// <summary>One YIUI-like component reference row persisted by the binding table window.</summary>
     [Serializable]
     internal sealed class ObfUiTableRow
     {
@@ -37,8 +36,7 @@ namespace ObFramework.Adapter.Unity.EditorTools
 
         public string DisplayKind => ((UIComponentKind)kind).ToString();
 
-        public ObfUiTableRow Clone()
-            => (ObfUiTableRow)MemberwiseClone();
+        public ObfUiTableRow Clone() => (ObfUiTableRow)MemberwiseClone();
     }
 
     /// <summary>Serialized binding table + generation options for the current Prefab.</summary>
@@ -131,8 +129,8 @@ namespace ObFramework.Adapter.Unity.EditorTools
                 state.prefabPath = prefabPath;
 
             var existing = new HashSet<string>(StringComparer.Ordinal);
-            for (var index = 0; index < state.rows.Length; index++)
-                existing.Add(RowIdentity(state.rows[index]));
+            foreach (var t in state.rows)
+                existing.Add(RowIdentity(t));
 
             var rows = new List<ObfUiTableRow>(state.rows);
             var added = 0;
