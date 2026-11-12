@@ -17,11 +17,13 @@ namespace ObFramework.Cli.Commands.Reference;
         [CommandArgument(2, "[REFERENCES]")]
         [Description("Referenced System or Model names")]
         public string[] References { get; set; } = Array.Empty<string>();
+        [CommandOption("-d|--desc <DESCRIPTION>")]
+        [Description("Description of the System or Model")]
+        public string NodeDescription { get; set; } = string.Empty;
     }
 
 public sealed class ReferenceCommand : Command<ReferenceSettings>
 {
-
     public override int Execute(CommandContext context, ReferenceSettings settings, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -34,9 +36,11 @@ public sealed class ReferenceCommand : Command<ReferenceSettings>
             switch (settings.Action.ToLowerInvariant())
             {
                 case "add":
-                    return string.IsNullOrWhiteSpace(name) ? Fail("node name is required.") 
-                        : Complete(ReferenceNodeHelper.CreateNode(name, references));
-
+                    if (string.IsNullOrWhiteSpace(name))
+                        return Fail("node name is required.");
+                    return string.IsNullOrWhiteSpace(settings.NodeDescription) ? 
+                        Fail("node description is required.") : 
+                        Complete(ReferenceNodeHelper.CreateNode(name, settings.NodeDescription, references));
                 case "link":
                     if (string.IsNullOrWhiteSpace(name) || references.Length == 0)
                         return Fail("node and references are required.");

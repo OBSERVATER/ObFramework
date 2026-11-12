@@ -9,18 +9,20 @@ public static class ReferenceNodeHelper
 
     private static readonly Dictionary<string, ReferenceNode> _nameMap = Load();
 
-    public static string CreateNode(string name, params string[] names)
+    public static string CreateNode(string name,string desc, params string[] names)
     {
         if (!ValidNames(name, names))
             return "node names cannot be empty.";
-
+        if (string.IsNullOrWhiteSpace(desc))
+            return "node description cannot be empty.";
         if (_nameMap.ContainsKey(name))
             return "node already exists.";
 
         _nameMap.Add(name, new ReferenceNode
         {
             Name = name,
-            Reference = names.Distinct().ToList()
+            Reference = [.. names.Distinct()],
+            Description = desc
         });
 
         var cycle = FindCycle();
@@ -128,6 +130,7 @@ public static class ReferenceNodeHelper
 
         var visited = new HashSet<string>(direct) { name };
         var indirect = new List<string>();
+        var desc = _nameMap[name].Description;
         var queue = new Queue<string>(direct);
 
         while (queue.Count > 0)
@@ -153,7 +156,8 @@ public static class ReferenceNodeHelper
         {
             name,
             direct,
-            indirect
+            indirect,
+            desc
         }, Formatting.Indented);
 
         return true;
