@@ -7,8 +7,8 @@
       The sources physically live under ObFramework.Adapter.Unity/EditorDeploy/Core so the exact
       same files can be deployed into a Unity project by `ob unity deploy` and compiled by the
       Editor asmdef next to the thin UnityEditor glue. This project compiles them for pure .NET
-      tests and for the ObFramework.Adapter.Unity.Editor static compile validation, and must not
-      reference UnityEngine/UnityEditor.
+      tests and for the ObFramework.Adapter.Unity editor-tools compile validation build mode
+      (-p:ObfBuildEditorTools=true), and must not reference UnityEngine/UnityEditor.
     -->
     <PropertyGroup>
         <TargetFramework>netstandard2.1</TargetFramework>
