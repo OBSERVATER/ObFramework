@@ -1,6 +1,4 @@
-using System;
-
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// Marks a POCO configuration property as a module-relative path.

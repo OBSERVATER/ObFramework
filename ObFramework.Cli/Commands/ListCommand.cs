@@ -22,7 +22,7 @@ namespace ObFramework.Cli.Commands
                 return 0;
             }
 
-            var table = new Table();
+            var table = new Spectre.Console.Table();
             table.AddColumn("Embedded Resource");
 
             foreach (var resource in resources)

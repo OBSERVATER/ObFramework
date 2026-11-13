@@ -1,20 +1,11 @@
 using System.ComponentModel;
-using ObFramework.Cli.Config;
+using ObFramework.Cli.Commands.Config;
 using ObFramework.Cli.Deployment;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace ObFramework.Cli.Commands
 {
-    /// <summary>
-    /// <c>ob unity deploy|remove &lt;project&gt;</c> — installs, updates or removes the Unity Editor
-    /// tooling carried by the NuGet package inside a Unity project.
-    /// <para>
-    /// Registered through <see cref="UnityDeployCliModule"/> using the existing
-    /// <c>CliModule.InjectCommand&lt;T&gt;</c> extension point. The file deployment logic is pure
-    /// .NET (<see cref="UnityEditorDeployer"/>); Unity itself is never launched.
-    /// </para>
-    /// </summary>
     internal sealed class UnityCommand : Command<UnityCommand.Settings>
     {
         internal sealed class Settings : CommandSettings
@@ -118,7 +109,7 @@ namespace ObFramework.Cli.Commands
             }
             else
             {
-                var table = new Table().Border(TableBorder.Rounded);
+                var table = new Spectre.Console.Table().Border(TableBorder.Rounded);
                 table.AddColumn("File");
                 table.AddColumn("Change");
                 table.AddColumn("Detail");

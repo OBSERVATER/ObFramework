@@ -1,6 +1,4 @@
-using System;
-
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// Raised when a setup.json document, module registration or module path is invalid.

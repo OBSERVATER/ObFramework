@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using ObFramework.Cli.Config;
+using ObFramework.Cli.Commands.Config;
 
 namespace ObFramework.Test.Cli
 {

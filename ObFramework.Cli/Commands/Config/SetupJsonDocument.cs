@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// Typed model of one <c>setup.json</c> document.
@@ -26,7 +22,7 @@ namespace ObFramework.Cli.Config
     /// replaces <c>modules.&lt;section&gt;</c>; nothing else in the file is touched.
     /// </para>
     /// The Config CLI is a pure .NET file-editing capability; it is intentionally independent of
-    /// the runtime <c>ConfigPlugin</c>, diagnostics.json and DiagnosticsCommand.
+    /// the runtime <c>ConfigPlugin</c>.
     /// </summary>
     public sealed class SetupJsonDocument
     {

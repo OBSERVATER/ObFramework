@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-
-namespace ObFramework.Cli.Config.Modules
+namespace ObFramework.Cli.Commands.Config.Modules
 {
     /// <summary>
     /// POCO configuration contributed by the Unity module for one Unity project's setup.json.

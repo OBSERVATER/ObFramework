@@ -1,6 +1,4 @@
-using System;
-
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// A package contributes one module configuration type to the Config CLI by exposing an

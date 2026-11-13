@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using NUnit.Framework;
-using ObFramework.Cli.Config;
+using ObFramework.Cli.Commands.Config;
 
 namespace ObFramework.Test.Cli
 {

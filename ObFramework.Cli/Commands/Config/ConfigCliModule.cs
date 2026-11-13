@@ -1,9 +1,8 @@
-using System;
-using ObFramework.Cli.Commands;
-using ObFramework.Cli.Config.Modules;
+using ObFramework.Cli.Commands.Config.Modules;
 using ObFramework.Cli.Core;
+using ObFramework.Integrated.Diagnostics;
 
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// Registers the setup.json Config CLI capability through the existing CLI extension point.
@@ -37,6 +36,8 @@ namespace ObFramework.Cli.Config
                 throw new ArgumentNullException(nameof(registry));
 
             registry.Register<UnitySetupConfig>("unity", "unity");
+            registry.Register<LubanSetupConfig>("luban", "luban");
+            registry.Register<DiagnosticsOption>("diagnostics", "diagnostics");
         }
 
         /// <summary>Registers <c>ob config</c> through the existing <c>CliModule.InjectCommand&lt;T&gt;</c> extension point.</summary>

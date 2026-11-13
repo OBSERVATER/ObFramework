@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using ObFramework.Cli.Config;
+using ObFramework.Cli.Commands.Config;
 
 namespace ObFramework.Cli.Deployment
 {

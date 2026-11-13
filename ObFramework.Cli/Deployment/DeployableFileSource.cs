@@ -29,7 +29,7 @@ namespace ObFramework.Cli.Deployment
     /// <c>ObFramework.Adapter.Unity/EditorDeploy/**</c> and embedded by ObFramework.Cli.csproj as
     /// <c>ObFramework.Cli.UnityEditorDeploy/**</c> resources (plus contentFiles in the packed
     /// CLI package). A NuGet dotnet tool package only guarantees the tool assembly and its
-    /// dependencies are restored, so embedding is what makes <c>ob unity deploy</c> work from an
+    /// dependencies are restored, so embedding is what makes <c>ob init</c> work from an
     /// installed package with no build-machine copy of the adapter folder.
     /// </para>
     /// </summary>

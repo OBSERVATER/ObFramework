@@ -43,10 +43,6 @@ namespace ObFramework.Cli.Core
                     .WithDescription("Create template code")
                     .WithData(_session);
 
-                config.AddCommand<DiagnosticsCommand>("diagnostics")
-                    .WithDescription("something about diagnostics and log")
-                    .WithData(_session);
-                
                 config.AddCommand<ReferenceCommand>("reference")
                     .WithDescription("references among systems and models")
                     .WithData(_session);

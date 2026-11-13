@@ -20,7 +20,7 @@
                                       layout is used, so its outputs/intermediates do not mix with
                                       the runtime build (see build.ps1 / build.sh in the repo root).
                                       The same sources are deployed into a Unity project by
-                                      `ob unity deploy` and imported by
+                                      `ob init` and imported by
                                       EditorDeploy/ObFramework.Adapter.Unity.Editor.asmdef.
 
       Guard limitation: the Unity Editor asmdef compiles this glue against the deployed runtime

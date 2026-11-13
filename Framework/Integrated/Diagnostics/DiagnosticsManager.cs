@@ -10,20 +10,24 @@ namespace ObFramework.Integrated.Diagnostics
     {
         private ILogger? _logger;
         private Logger? _ownedLogger;
-        internal void Initialize(DiagnosticsOption option, ILogEventSink? extraSink)
+
+        internal void Initialize(string outputDirectory, ILogEventSink? extraSink)
         {
-            var config = new LoggerConfiguration().MinimumLevel.Is(option.MinLevel).WriteTo.Async(sink =>
-                sink.File(Path.Combine(option.OutputDirPath, $"game-{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.log"),
+            Directory.CreateDirectory(outputDirectory);
+            var config = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Async(sink =>
+                sink.File(Path.Combine(outputDirectory, $"game-{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.log"),
                     outputTemplate: "[{Timestamp:HH:mm:ss.fff}][{Level}][{SourceContext}]{Message:lj}{NewLine}{Exception}",
-                    fileSizeLimitBytes: checked((long)option.MaxFileSizeMB * 1024 * 1024),
-                    rollOnFileSizeLimit: true, retainedFileCountLimit: option.MaxFileCount));
+                    fileSizeLimitBytes: 10L * 1024 * 1024,
+                    rollOnFileSizeLimit: true, retainedFileCountLimit: 10));
             if (extraSink != null)
                 config.WriteTo.Sink(new BorrowedSink(extraSink));
             _ownedLogger = config.CreateLogger();
             _logger = _ownedLogger;
         }
+
         internal void Initialize(ILogger logger) => _logger = logger;
         public ILogger GetLogger(string source) => (_logger ?? throw new InvalidOperationException("Diagnostics is not initialized or has been stopped.")).ForContext("SourceContext", source);
+
         internal void Shutdown()
         {
             var logger = _ownedLogger;

@@ -1,7 +1,4 @@
-using System;
-using System.IO;
-
-namespace ObFramework.Cli.Config
+namespace ObFramework.Cli.Commands.Config
 {
     /// <summary>
     /// Locates the <c>setup.json</c> used by the Config CLI.

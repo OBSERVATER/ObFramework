@@ -16,6 +16,7 @@ namespace ObFramework.Integrated.Config
         public ConfigPlugin(IConfigCatalog catalog) => _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
 
         public Task LoadAllAsync(IConfigCatalog catalog, CancellationToken ct = default) => Manager.LoadAllAsync(catalog, ct);
+        public T GetTables<T>() where T : class => Manager.GetTables<T>();
         public IReadOnlyList<T> Get<T>() where T : class, IConfig => Manager.Get<T>();
         public T? Get<T>(int id) where T : class, IConfig => Manager.Get<T>(id);
 

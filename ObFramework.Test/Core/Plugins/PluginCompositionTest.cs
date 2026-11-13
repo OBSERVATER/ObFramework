@@ -35,7 +35,7 @@ public class PluginCompositionTest
                 ResourcesAvailableDuringUIStop = handle.Get<string>()!.Contains("seven");
             }),
             new SavePlugin(Store),
-            new DiagnosticsPlugin(new DiagnosticsOption(_directory), Sink),
+            new DiagnosticsPlugin(_directory, Sink),
             ResourcePlugin.Create(Assets)
         };
         protected override IArchitecture CreateArchitecture(IPluginContext plugins)

@@ -112,7 +112,7 @@ namespace ObFramework.Cli.Deployment
             return Load(DeploymentText.Decode(content));
         }
 
-        /// <summary>Loads the plan embedded in the CLI assembly (the default <c>ob unity deploy</c> plan).</summary>
+        /// <summary>Loads the plan embedded in the CLI assembly (the default <c>ob init</c> plan).</summary>
         public static DeploymentManifest LoadEmbeddedPlan(Assembly? assembly = null)
         {
             assembly ??= typeof(DeploymentManifest).Assembly;
@@ -140,7 +140,7 @@ namespace ObFramework.Cli.Deployment
             var resolved = new List<DeployableFile>();
             var mappedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var file in Files ?? Array.Empty<DeployableFile>())
+            foreach (var file in Files)
             {
                 var sourcePath = DeploymentPaths.NormalizeRelative(file.Source, "deployable source");
                 mappedSources.Add(sourcePath);

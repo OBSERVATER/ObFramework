@@ -6,11 +6,13 @@ namespace ObFramework.Integrated.Config
     {
         public Type Type { get; }
         public string Location { get; }
+        public string? Name { get; }
 
-        public ConfigEntry(Type type, string location)
+        public ConfigEntry(Type type, string location, string? name = null)
         {
             Type = type;
             Location = location;
+            Name = name;
         }
     }
 }
