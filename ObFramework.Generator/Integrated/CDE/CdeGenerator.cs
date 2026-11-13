@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-namespace ObFramework.Generator.CDE
+namespace ObFramework.Generator.Integrated.CDE
 {
     /// <summary>
     /// Engine-neutral CDE source generator (T07/T09/T10/T11). It turns
@@ -53,12 +53,12 @@ namespace ObFramework.Generator.CDE
                 return false;
             if (declarator.Parent is not VariableDeclarationSyntax declaration)
                 return false;
-            return declaration.Parent is FieldDeclarationSyntax field && field.AttributeLists.Count > 0;
+            return declaration.Parent is FieldDeclarationSyntax { AttributeLists: { Count: > 0 } };
         }
 
         private static bool IsAttributedMethodCandidate(SyntaxNode node)
         {
-            return node is MethodDeclarationSyntax method && method.AttributeLists.Count > 0;
+            return node is MethodDeclarationSyntax { AttributeLists: { Count: > 0 } };
         }
 
         private static IFieldSymbol? GetAttributedField(GeneratorSyntaxContext syntaxContext, System.Threading.CancellationToken cancellationToken)

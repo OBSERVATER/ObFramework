@@ -4,17 +4,10 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ObFramework.Generator.CDE
+namespace ObFramework.Generator.Integrated.CDE
 {
-    /// <summary>
-    /// Emits the engine-neutral generated surface of one business View: public observable
-    /// properties over their single backing field and nested <see cref="AUICommand"/> /
-    /// <see cref="AUIAsyncCommand"/> subclasses for [RelayCommand] methods. Generated code only uses
-    /// public/protected runtime API and fully qualified framework type names.
-    /// </summary>
     internal sealed class CdeViewEmitter
     {
         private readonly Compilation _compilation;
@@ -32,10 +25,7 @@ namespace ObFramework.Generator.CDE
             _viewTypeName = CdeSymbols.DisplayType(view);
         }
 
-        public ImmutableArray<Diagnostic> Diagnostics
-        {
-            get { return _diagnostics.ToImmutableArray(); }
-        }
+        public ImmutableArray<Diagnostic> Diagnostics => _diagnostics.ToImmutableArray();
 
         public string? Emit(ImmutableArray<IFieldSymbol> fields, ImmutableArray<IMethodSymbol> methods)
         {
@@ -602,9 +592,9 @@ namespace ObFramework.Generator.CDE
             builder.AppendLine(")");
             builder.Append(inner).AppendLine("{");
             builder.Append(body).AppendLine("_view = view;");
-            if (model.IsAsync && model.AllowConcurrentExecutions)
+            if (model is { IsAsync: true, AllowConcurrentExecutions: true })
                 builder.Append(body).AppendLine("AllowConcurrentExecutions = true;");
-            if (model.IsAsync && !model.CancelOnClose)
+            if (model is { IsAsync: true, CancelOnClose: false })
                 builder.Append(body).AppendLine("CancelOnClose = false;");
             builder.Append(inner).AppendLine("}");
             builder.AppendLine();
@@ -638,15 +628,15 @@ namespace ObFramework.Generator.CDE
                 builder.Append(inner).AppendLine("protected override bool CanExecuteCore(object? parameter)");
                 builder.Append(inner).AppendLine("{");
                 builder.Append(body).Append("return _view.").Append(methodName).Append("((").Append(valueTypeName).Append(")parameter!);").AppendLine();
-                builder.Append(inner).AppendLine("}");
             }
             else
             {
                 builder.Append(inner).AppendLine("protected override bool CanExecuteCore()");
                 builder.Append(inner).AppendLine("{");
                 builder.Append(body).Append("return _view.").Append(methodName).AppendLine("();");
-                builder.Append(inner).AppendLine("}");
             }
+
+            builder.Append(inner).AppendLine("}");
             builder.AppendLine();
         }
 

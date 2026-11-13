@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ObFramework.Generator.CDE
+namespace ObFramework.Generator.Integrated.CDE
 {
     /// <summary>
     /// Symbol, attribute and naming helpers shared by the CDE generator pipeline. The generator
@@ -159,24 +159,24 @@ namespace ObFramework.Generator.CDE
 
         /// <summary>
         /// Derives the generated PascalCase property name from a private field name. The rule is
-        /// shared with the Unity binding generator through <see cref="SourceRules.CdeSourceRules"/>
+        /// shared with the Unity binding generator through <see cref="CdeSourceRules"/>
         /// so both generators agree on the same declaration (leading underscores and a legacy 'm_'
         /// prefix are trimmed, including nested cases such as 'm__state' -> 'State').
         /// </summary>
         internal static string? GetGeneratedPropertyName(IFieldSymbol field)
         {
-            return SourceRules.CdeSourceRules.GetPropertyName(field.Name);
+            return CdeSourceRules.GetPropertyName(field.Name);
         }
 
         /// <summary>
         /// Derives the nested command type name from the relay method name; a trailing 'Async'
         /// suffix is dropped before appending 'Command' (Submit/SubmitAsync -> SubmitCommand).
         /// The rule is shared with the Unity binding generator through
-        /// <see cref="SourceRules.CdeSourceRules"/>.
+        /// <see cref="CdeSourceRules"/>.
         /// </summary>
         internal static string GetGeneratedCommandName(IMethodSymbol method)
         {
-            return SourceRules.CdeSourceRules.GetCommandTypeName(method.Name);
+            return CdeSourceRules.GetCommandTypeName(method.Name);
         }
 
         internal static string EscapeIdentifier(string identifier)

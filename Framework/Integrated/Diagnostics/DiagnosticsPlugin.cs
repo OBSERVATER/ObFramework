@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ObFramework.Core;
 using Serilog;
 using Serilog.Core;
+using Serilog.Events;
 
 namespace ObFramework.Integrated.Diagnostics
 {
@@ -13,14 +14,19 @@ namespace ObFramework.Integrated.Diagnostics
         private readonly ILogEventSink? _extraSink;
         private readonly ILogger? _externalLogger;
         private readonly DiagnosticsManager _manager = new DiagnosticsManager();
-
-        public DiagnosticsPlugin(string outputDirectory, ILogEventSink? extraSink = null)
+        private readonly LogEventLevel _lvl;
+        public DiagnosticsPlugin(string outputDirectory, LogEventLevel lvl, ILogEventSink? extraSink = null)
         {
             _outputDirectory = outputDirectory ?? throw new ArgumentNullException(nameof(outputDirectory));
+            _lvl = lvl;
             _extraSink = extraSink;
         }
 
-        public DiagnosticsPlugin(ILogger logger) => _externalLogger = logger ?? throw new ArgumentNullException(nameof(logger));
+        public DiagnosticsPlugin(ILogger logger, LogEventLevel lvl)
+        {
+            _externalLogger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _lvl = lvl;
+        }
 
         public ILogger GetLogger(string source) => _manager.GetLogger(source);
         void IPlugin.Register(PluginRegistration registration) { }
@@ -31,7 +37,7 @@ namespace ObFramework.Integrated.Diagnostics
             if (_externalLogger != null)
                 _manager.Initialize(_externalLogger);
             else
-                _manager.Initialize(_outputDirectory!, _extraSink);
+                _manager.Initialize(_outputDirectory!,_lvl, _extraSink);
             return Task.CompletedTask;
         }
 

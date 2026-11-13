@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ObFramework.Generator.CDE
+namespace ObFramework.Generator.Integrated.CDE
 {
     /// <summary>One generated source file for one business View.</summary>
     internal sealed class CdeSource

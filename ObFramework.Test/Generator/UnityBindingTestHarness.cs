@@ -4,7 +4,7 @@ using System.Runtime.ExceptionServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
-using ObFramework.Generator.CDE;
+using ObFramework.Generator.Integrated.CDE;
 using ObFramework.Generator.Unity;
 
 namespace ObFramework.Test.Generator;

@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace ObFramework.Generator.SourceRules
+namespace ObFramework.Generator.Integrated.CDE
 {
     /// <summary>
     /// The single shared source-declaration naming rule used by BOTH generators: the engine-neutral

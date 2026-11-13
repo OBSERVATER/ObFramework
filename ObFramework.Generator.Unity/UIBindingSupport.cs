@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using ObFramework.Generator.Integrated.CDE;
 
 namespace ObFramework.Generator.Unity
 {
@@ -339,13 +340,13 @@ namespace ObFramework.Generator.Unity
         {
             // Single shared rule with the CDE generator (linked source, see CdeSourceRules) so a
             // declaration such as `m__state` always generates `State` in both pipelines.
-            return SourceRules.CdeSourceRules.GetPropertyName(fieldName) ?? string.Empty;
+            return CdeSourceRules.GetPropertyName(fieldName) ?? string.Empty;
         }
 
         internal static string CommandTypeNameFor(string methodName)
         {
             // Same shared command type rule as the CDE generator (`Save`/`SaveAsync` -> `SaveCommand`).
-            return SourceRules.CdeSourceRules.GetCommandTypeName(methodName);
+            return CdeSourceRules.GetCommandTypeName(methodName);
         }
 
         internal static bool HasAttribute(ISymbol member, INamedTypeSymbol? attribute) =>

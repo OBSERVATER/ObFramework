@@ -5,6 +5,7 @@ using ObFramework.Integrated.Resource;
 using ObFramework.Integrated.Save;
 using ObFramework.Integrated.UI;
 using ObFramework.Test.Core.UI;
+using Serilog.Events;
 using ResourceTests = ObFramework.Test.Core.Plugins.ResourceConfigPluginTest;
 using SaveTests = ObFramework.Test.Core.Plugins.SaveDiagnosticsPluginTest;
 
@@ -35,7 +36,7 @@ public class PluginCompositionTest
                 ResourcesAvailableDuringUIStop = handle.Get<string>()!.Contains("seven");
             }),
             new SavePlugin(Store),
-            new DiagnosticsPlugin(_directory, Sink),
+            new DiagnosticsPlugin(_directory, LogEventLevel.Information,Sink),
             ResourcePlugin.Create(Assets)
         };
         protected override IArchitecture CreateArchitecture(IPluginContext plugins)

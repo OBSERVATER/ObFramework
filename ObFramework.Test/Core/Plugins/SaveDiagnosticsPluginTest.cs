@@ -133,7 +133,7 @@ public class SaveDiagnosticsPluginTest
     {
         var directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var sink = new Sink();
-        var host = new PluginHost(new DiagnosticsPlugin(directory, sink));
+        var host = new PluginHost(new DiagnosticsPlugin(directory,LogEventLevel.Warning, sink));
         try
         {
             Assert.That(Directory.Exists(directory), Is.False);

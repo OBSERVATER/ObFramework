@@ -12,5 +12,9 @@
 		     (IIncrementalGenerator / ForAttributeWithMetadataName are available from 4.3). -->
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
 	</ItemGroup>
+	<ItemGroup>
+	  <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+	  <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+	</ItemGroup>
 
 </Project>

@@ -11,10 +11,10 @@ namespace ObFramework.Integrated.Diagnostics
         private ILogger? _logger;
         private Logger? _ownedLogger;
 
-        internal void Initialize(string outputDirectory, ILogEventSink? extraSink)
+        internal void Initialize(string outputDirectory,LogEventLevel lvl, ILogEventSink? extraSink)
         {
             Directory.CreateDirectory(outputDirectory);
-            var config = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Async(sink =>
+            var config = new LoggerConfiguration().MinimumLevel.Is(lvl).WriteTo.Async(sink =>
                 sink.File(Path.Combine(outputDirectory, $"game-{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.log"),
                     outputTemplate: "[{Timestamp:HH:mm:ss.fff}][{Level}][{SourceContext}]{Message:lj}{NewLine}{Exception}",
                     fileSizeLimitBytes: 10L * 1024 * 1024,
