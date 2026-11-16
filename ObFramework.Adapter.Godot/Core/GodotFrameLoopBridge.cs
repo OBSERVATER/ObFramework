@@ -1,16 +1,16 @@
 using System;
 using Godot;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.Clock;
 
 namespace ObFramework.Adapter.Godot.Core
 {
     public sealed partial class GodotFrameLoopBridge : Node, IFrameLoopDriver
     {
         private readonly Func<bool> _canDispatch;
-        private FrameDispatcher? _dispatcher;
+        private ClockPlugin? _clock;
         private GodotLateFrameLoopNode? _late;
 
-        public GodotFrameLoopBridge() => _canDispatch = () => _dispatcher != null;
+        public GodotFrameLoopBridge() => _canDispatch = () => _clock != null;
 
         public override void _Ready()
         {
@@ -24,16 +24,15 @@ namespace ObFramework.Adapter.Godot.Core
             _late.SetProcess(false);
         }
 
-        public void Bind(FrameDispatcher dispatcher)
+        public void Bind(ClockPlugin clock)
         {
-            if (dispatcher == null)
-                throw new ArgumentNullException(nameof(dispatcher));
-            if (_dispatcher != null)
+            ArgumentNullException.ThrowIfNull(clock);
+            if (_clock != null)
                 throw new InvalidOperationException("Godot frame loop is already bound.");
             if (!IsInsideTree() || _late == null)
                 throw new InvalidOperationException("Godot frame loop must be in the SceneTree before binding.");
 
-            _dispatcher = dispatcher;
+            _clock = clock;
             SetProcess(true);
             SetPhysicsProcess(true);
             _late.SetProcess(true);
@@ -41,7 +40,7 @@ namespace ObFramework.Adapter.Godot.Core
 
         public void Unbind()
         {
-            _dispatcher = null;
+            _clock = null;
             if (GodotObject.IsInstanceValid(this))
             {
                 SetProcess(false);
@@ -52,8 +51,8 @@ namespace ObFramework.Adapter.Godot.Core
         }
 
         public override void _ExitTree() => Unbind();
-        public override void _Process(double delta) => _dispatcher?.Dispatch(_canDispatch);
-        public override void _PhysicsProcess(double delta) => _dispatcher?.DispatchFixed(_canDispatch);
-        internal void DispatchLate() => _dispatcher?.DispatchLate(_canDispatch);
+        public override void _Process(double delta) => _clock?.DispatchUpdate((float)delta, _canDispatch);
+        public override void _PhysicsProcess(double delta) => _clock?.DispatchFixed(_canDispatch);
+        internal void DispatchLate() => _clock?.DispatchLate(_canDispatch);
     }
 }

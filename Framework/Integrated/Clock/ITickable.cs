@@ -1,4 +1,4 @@
-﻿namespace ObFramework.Core.FrameLoop
+﻿namespace ObFramework.Integrated.Clock
 {
     public interface IFrameTickable { }
 
@@ -15,5 +15,10 @@
     public interface ILateTickable : IFrameTickable
     {
         void LateTick();
+    }
+
+    public interface ILogicTickable : IFrameTickable
+    {
+        void LogicTick();
     }
 }

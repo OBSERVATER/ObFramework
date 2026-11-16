@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Adapter.Unity.ViewBinding;
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.Clock;
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
 
@@ -18,12 +18,12 @@ namespace ObFramework.Adapter.Unity.Core
     {
         private readonly Func<bool> _canDispatch;
         private Action<UnityViewBindings>? _prepare;
-        private FrameDispatcher? _dispatcher;
+        private ClockPlugin? _clock;
         private UnityViewBindings? _views;
         private bool _installed;
 
         public UnityFrameLoopBridge() =>
-            _canDispatch = () => _dispatcher != null && (_views?.IsReady ?? true);
+            _canDispatch = () => _clock != null && (_views?.IsReady ?? true);
 
         internal UnityFrameLoopBridge(Action<UnityViewBindings> prepare) : this() => _prepare = prepare;
 
@@ -47,10 +47,10 @@ namespace ObFramework.Adapter.Unity.Core
                 await views.ReleaseAsync();
         }
 
-        public void Bind(FrameDispatcher dispatcher)
+        public void Bind(ClockPlugin clock)
         {
-            if (dispatcher == null)
-                throw new ArgumentNullException(nameof(dispatcher));
+            if (clock == null)
+                throw new ArgumentNullException(nameof(clock));
             if (_installed)
                 throw new InvalidOperationException("Unity frame loop is already bound.");
 
@@ -67,7 +67,7 @@ namespace ObFramework.Adapter.Unity.Core
             InsertBefore(ref loop, typeof(PreLateUpdate), typeof(PreLateUpdate.ScriptRunBehaviourLateUpdate),
                 new PlayerLoopSystem { type = typeof(ObFLateTick), updateDelegate = OnLateTick });
 
-            _dispatcher = dispatcher;
+            _clock = clock;
             try
             {
                 PlayerLoop.SetPlayerLoop(loop);
@@ -75,7 +75,7 @@ namespace ObFramework.Adapter.Unity.Core
             }
             catch
             {
-                _dispatcher = null;
+                _clock = null;
                 throw;
             }
         }
@@ -84,7 +84,7 @@ namespace ObFramework.Adapter.Unity.Core
         {
             if (!_installed)
                 return;
-            _dispatcher = null;
+            _clock = null;
             var loop = PlayerLoop.GetCurrentPlayerLoop();
             var changed = RemoveOwned(ref loop, typeof(ObFTick)) |
                           RemoveOwned(ref loop, typeof(ObFFixedTick)) |
@@ -94,14 +94,14 @@ namespace ObFramework.Adapter.Unity.Core
             _installed = false;
         }
 
-        private void OnTick() => Dispatch((frame, canContinue) => frame.Dispatch(canContinue), update: true);
-        private void OnFixedTick() => Dispatch((frame, canContinue) => frame.DispatchFixed(canContinue));
-        private void OnLateTick() => Dispatch((frame, canContinue) => frame.DispatchLate(canContinue));
+        private void OnTick() => Dispatch((clock, canContinue) => clock.DispatchUpdate(UnityEngine.Time.deltaTime, canContinue), update: true);
+        private void OnFixedTick() => Dispatch((clock, canContinue) => clock.DispatchFixed(canContinue));
+        private void OnLateTick() => Dispatch((clock, canContinue) => clock.DispatchLate(canContinue));
 
-        private void Dispatch(Action<FrameDispatcher, Func<bool>> phase, bool update = false)
+        private void Dispatch(Action<ClockPlugin, Func<bool>> phase, bool update = false)
         {
-            var dispatcher = _dispatcher;
-            if (dispatcher == null || !_canDispatch())
+            var clock = _clock;
+            if (clock == null || !_canDispatch())
                 return;
 
             var views = _views;
@@ -110,7 +110,7 @@ namespace ObFramework.Adapter.Unity.Core
             {
                 if (update)
                     views?.BeforeUpdate();
-                phase(dispatcher, _canDispatch);
+                phase(clock, _canDispatch);
             }
             finally { views?.EndOperation(); }
         }

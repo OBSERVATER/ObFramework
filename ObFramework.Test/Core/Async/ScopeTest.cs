@@ -162,7 +162,7 @@ public class ScopeTest
     }
 
     [Test]
-    public async Task Phase2_5_StaleAsyncWorkCannotModifyReusedObject()
+    public async Task StaleAsyncWorkCannotModifyReusedObject()
     {
         var lifetime = new ObLifetime();
         var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -211,7 +211,7 @@ public class ScopeTest
     }
 
     [Test]
-    public async Task Phase2_6_ArchitectureShutdown_ShouldBeSafe()
+    public async Task ArchitectureShutdown_ShouldBeSafe()
     {
         var lifetime = new ObLifetime();
         var scope = new ObExecutionScope();

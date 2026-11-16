@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.Clock;
 
 namespace ObFramework.Adapter.Godot.Core
 {
@@ -89,7 +89,7 @@ namespace ObFramework.Adapter.Godot.Core
             PrepareRuntime(architecture);
         }
 
-        void IFrameLoopDriver.Bind(FrameDispatcher dispatcher) => _frameLoop!.Bind(dispatcher);
+        void IFrameLoopDriver.Bind(ClockPlugin clock) => _frameLoop!.Bind(clock);
         void IFrameLoopDriver.Unbind() => _frameLoop?.Unbind();
         Task IApplicationFrameLoopDriver.ReleaseAsync() => Task.CompletedTask;
 

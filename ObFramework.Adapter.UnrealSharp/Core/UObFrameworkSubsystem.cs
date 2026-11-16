@@ -1,6 +1,6 @@
 using ObFramework.Adapter.UnrealSharp.Diagnostics;
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.Clock;
 using UnrealSharp.Attributes;
 using UnrealSharp.UnrealSharpCore;
 
@@ -11,7 +11,7 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
 {
     private const float FixedStep = 0.02f;
     private const int MaxFixedStepsPerFrame = 4;
-    private FrameDispatcher? _dispatcher;
+    private ClockPlugin? _clock;
     private Func<bool>? _canContinue;
     private float _accumulator;
     private bool _started;
@@ -72,19 +72,19 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
         return Task.CompletedTask;
     }
 
-    public void Bind(FrameDispatcher dispatcher)
+    public void Bind(ClockPlugin clock)
     {
-        ArgumentNullException.ThrowIfNull(dispatcher);
-        if (_closed || _dispatcher != null)
+        ArgumentNullException.ThrowIfNull(clock);
+        if (_closed || _clock != null)
             throw new InvalidOperationException("Unreal frame loop cannot be bound.");
-        _dispatcher = dispatcher;
-        _canContinue = () => !_closed && ReferenceEquals(_dispatcher, dispatcher);
+        _clock = clock;
+        _canContinue = () => !_closed && ReferenceEquals(_clock, clock);
         _accumulator = 0;
     }
 
     public void Unbind()
     {
-        _dispatcher = null;
+        _clock = null;
         _canContinue = null;
         _accumulator = 0;
     }
@@ -92,9 +92,9 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
     public override void Tick(float deltaSeconds)
     {
         base.Tick(deltaSeconds);
-        var dispatcher = _dispatcher;
+        var clock = _clock;
         var canContinue = _canContinue;
-        if (_closed || dispatcher == null || canContinue == null)
+        if (_closed || clock == null || canContinue == null)
             return;
 
         var elapsed = Math.Clamp(deltaSeconds, 0f, FixedStep * MaxFixedStepsPerFrame);
@@ -103,7 +103,7 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
         while (_accumulator >= FixedStep && steps < MaxFixedStepsPerFrame)
         {
             _accumulator -= FixedStep;
-            dispatcher.DispatchFixed(canContinue);
+            clock.DispatchFixed(canContinue);
             if (!canContinue())
                 return;
             steps++;
@@ -111,9 +111,9 @@ public partial class UObFrameworkSubsystem : UCSGameInstanceSubsystem, IFrameLoo
         if (steps == MaxFixedStepsPerFrame && _accumulator >= FixedStep)
             _accumulator = 0;
 
-        dispatcher.Dispatch(canContinue);
+        clock.DispatchUpdate(deltaSeconds, canContinue);
         if (canContinue())
-            dispatcher.DispatchLate(canContinue);
+            clock.DispatchLate(canContinue);
     }
 
     public override void Deinitialize()

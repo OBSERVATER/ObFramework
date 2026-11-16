@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
 using ObFramework.Integrated.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -25,7 +24,6 @@ namespace ObFramework.Adapter.Unity.ViewBinding
         public static UnityViewBindings? Current { get; private set; }
         private bool IsStopping => _closing || _stopping.IsCancellationRequested;
         public bool IsReady => _architecture != null && !IsStopping;
-        public FrameDispatcher Frame => _architecture!.Frame;
 
         public UnityViewBindings(CancellationToken stopping)
         {

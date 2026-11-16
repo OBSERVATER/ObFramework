@@ -1,6 +1,6 @@
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
 using ObFramework.Extension;
+using ObFramework.Integrated.Clock;
 
 namespace ObFramework.Test.Core.Plugins;
 
@@ -40,7 +40,7 @@ public class PluginApplicationTest
         public readonly Plugin Plugin = new();
         public bool FailEntry;
         public TaskCompletionSource<bool>? PendingEntry;
-        protected override IPlugin[] CreatePlugins() => new IPlugin[] { Plugin };
+        protected override IPlugin[] CreatePlugins() => new IPlugin[] { Plugin, new ClockPlugin(0.02f) };
         protected override IArchitecture CreateArchitecture(IPluginContext plugins)
         {
             Game.InitInterface(plugins);
@@ -72,7 +72,7 @@ public class PluginApplicationTest
             Assert.That(architecture.GetSystem<IBusiness>().Initialized, Is.True);
             _events.Add("driver-prepare");
         }
-        public void Bind(FrameDispatcher dispatcher) => _events.Add("driver-bind");
+        public void Bind(ClockPlugin clock) => _events.Add("driver-bind");
         public void Unbind() => _events.Add("driver-unbind");
         public Task ReleaseAsync()
         {

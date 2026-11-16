@@ -1,7 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
+using ObFramework.Core;
 
-namespace ObFramework.Core.FrameLoop
+namespace ObFramework.Integrated.Clock
 {
     public interface IApplicationFrameLoopDriver : IFrameLoopDriver
     {

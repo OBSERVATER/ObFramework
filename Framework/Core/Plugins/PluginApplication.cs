@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core.Async;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Integrated.Clock;
 
 namespace ObFramework.Core
 {
@@ -58,7 +58,7 @@ namespace ObFramework.Core
                 {
                     _boundDriver = driver;
                     _binding = true;
-                    try { driver.Bind(_architecture.Frame); }
+                    try { driver.Bind(_host.Context.Get<ClockPlugin>()); }
                     finally { _binding = false; }
                 }
                 ThrowIfStopping();

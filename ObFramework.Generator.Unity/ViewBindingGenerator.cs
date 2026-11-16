@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -24,181 +25,201 @@ namespace ObFramework.Generator.Unity
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            // Only classes that actually declare attributes are candidates for [BindView]; the
-            // interface generator then validates [UIBindData]/[UIBindCommand] declarations on types
-            // that carry attributed members. Both providers are syntax-guided and cacheable.
-            var controllers = context.SyntaxProvider.CreateSyntaxProvider(
-                    static (node, _) => node is ClassDeclarationSyntax declaration && declaration.AttributeLists.Count > 0,
-                    static (syntaxContext, _) =>
-                        syntaxContext.SemanticModel.GetDeclaredSymbol(syntaxContext.Node) as INamedTypeSymbol)
-                .Where(static symbol => symbol != null)
-                .Collect();
+            var controllers = context.SyntaxProvider
+                .ForAttributeWithMetadataName($"{BindingNamespace}.BindViewAttribute",
+                static (node, _) => node is ClassDeclarationSyntax,
+                static (item, ct) => Analyze(item, ct)).WithTrackingName("ViewBindingAnalysis");
+            context.RegisterSourceOutput(controllers, static (output, result) => EmitResult(output, result));
 
-            var typesWithAttributedMembers = context.SyntaxProvider.CreateSyntaxProvider(
-                    static (node, _) => node is MemberDeclarationSyntax member &&
-                                        member.AttributeLists.Count > 0 &&
-                                        member.Parent is TypeDeclarationSyntax,
-                    static (syntaxContext, _) =>
-                        syntaxContext.SemanticModel.GetDeclaredSymbol(syntaxContext.Node.Parent!) as INamedTypeSymbol)
-                .Where(static symbol => symbol != null)
-                .Collect();
-
-            var combined = controllers.Combine(typesWithAttributedMembers).Combine(context.CompilationProvider);
-            context.RegisterSourceOutput(combined, static (output, value) =>
-            {
-                var declarations = value.Item1.Item1;
-                var attributedTypes = value.Item1.Item2;
-                Run(output, value.Item2, declarations, attributedTypes);
-            });
+            var data = context.SyntaxProvider.ForAttributeWithMetadataName(
+                UIBindingSurface.DataAttributeName,
+                static (node, _) => node is VariableDeclaratorSyntax,
+                static (item, ct) => FindMissingBindView(item, ct));
+            var commands = context.SyntaxProvider.ForAttributeWithMetadataName(
+                UIBindingSurface.CommandAttributeName,
+                static (node, _) => node is VariableDeclaratorSyntax,
+                static (item, ct) => FindMissingBindView(item, ct));
+            context.RegisterSourceOutput(data, static (output, diagnostic) => Report(output, diagnostic));
+            context.RegisterSourceOutput(commands, static (output, diagnostic) => Report(output, diagnostic));
         }
 
-        private static void Run(SourceProductionContext output, Compilation compilation,
-            ImmutableArray<INamedTypeSymbol?> declarations, ImmutableArray<INamedTypeSymbol?> attributedTypes)
+        private static GenerationResult Analyze(GeneratorAttributeSyntaxContext item, CancellationToken ct)
         {
-            var attribute = compilation.GetTypeByMetadataName(BindingNamespace + ".BindViewAttribute");
-            if (attribute == null)
-                return;
+            var controller = (INamedTypeSymbol)item.TargetSymbol;
+            var compilation = item.SemanticModel.Compilation;
+            var binding = item.Attributes[0];
+            var location = binding.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation();
+            var diagnostics = new List<DiagnosticResult>();
+            string name = controller.ToDisplayString();
 
-            var context = new GenerationContext(output, compilation);
-            var surface = UIBindingSurface.Resolve(compilation);
-            var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            var controllers = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            foreach (var controller in declarations)
-            {
-                if (controller == null || !seen.Add(controller))
-                    continue;
-
-                var binding = controller.GetAttributes().FirstOrDefault(item => Same(item.AttributeClass, attribute));
-                if (binding != null)
-                {
-                    controllers.Add(controller);
-                    Generate(context, controller, binding, surface);
-                }
-            }
-
-            if (!surface.Available)
-                return;
-
-            var candidateTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            foreach (var type in attributedTypes)
-            {
-                if (type != null)
-                    candidateTypes.Add(type);
-            }
-            ReportMissingBindView(context, candidateTypes, attribute, controllers);
-        }
-
-        private static void Generate(GenerationContext context, INamedTypeSymbol controller, AttributeData binding,
-            UIBindingSurface surface)
-        {
-            var compilation = context.Compilation;
-            var location = binding.ApplicationSyntaxReference?.GetSyntax(context.CancellationToken).GetLocation();
             if (controller.ContainingType != null || controller.Arity != 0 || controller.IsAbstract ||
                 !DerivesFrom(controller, compilation.GetTypeByMetadataName("UnityEngine.MonoBehaviour")) ||
                 controller.DeclaringSyntaxReferences.Any(reference =>
-                    !(reference.GetSyntax(context.CancellationToken) is ClassDeclarationSyntax declaration) ||
+                    reference.GetSyntax(ct) is not ClassDeclarationSyntax declaration ||
                     !declaration.Modifiers.Any(SyntaxKind.PartialKeyword)))
             {
-                Report(context, InvalidController, location, $"'{controller}' must be a concrete, top-level, non-generic partial MonoBehaviour.");
-                return;
+                Report(diagnostics, InvalidController, location, $"'{controller}' must be a concrete, top-level, non-generic partial MonoBehaviour.");
+                return Finish();
             }
 
             if (binding.ConstructorArguments.Length != 2)
-                return;
+                return Finish();
 
             var view = binding.ConstructorArguments[0].Value as INamedTypeSymbol;
             var contract = binding.ConstructorArguments[1].Value as INamedTypeSymbol;
-            if (contract == null || contract.TypeKind != TypeKind.Interface || contract.IsUnboundGenericType ||
+            if (contract is not { TypeKind: TypeKind.Interface } || contract.IsUnboundGenericType ||
                 !compilation.IsSymbolAccessibleWithin(contract, controller) ||
                 !controller.AllInterfaces.Any(type => Same(type, contract)))
             {
-                Report(context, InvalidContract, location, $"'{controller}' must implement the accessible interface '{contract}' declared as its view contract.");
-                return;
+                Report(diagnostics, InvalidContract, location, $"'{controller}' must implement the accessible interface '{contract}' declared as its view contract.");
+                return Finish();
             }
 
-            if (view == null || view.TypeKind != TypeKind.Class || view.IsAbstract || view.IsUnboundGenericType ||
+            if (view is not { TypeKind: TypeKind.Class } || view.IsAbstract || view.IsUnboundGenericType ||
                 !compilation.IsSymbolAccessibleWithin(view, controller) ||
                 DerivesFrom(view, compilation.GetTypeByMetadataName("UnityEngine.Object")))
             {
-                Report(context, InvalidView, location, $"'{view}' must be a concrete, accessible C# class outside the UnityEngine.Object hierarchy.");
-                return;
+                Report(diagnostics, InvalidView, location, $"'{view}' must be a concrete, accessible C# class outside the UnityEngine.Object hierarchy.");
+                return Finish();
             }
 
             var constructors = view.InstanceConstructors.Where(ctor => ctor.DeclaredAccessibility == Accessibility.Public).ToArray();
             if (constructors.Length != 1 || constructors[0].IsVararg)
             {
-                Report(context, InvalidView, location, $"'{view}' must have exactly one public constructor.");
-                return;
+                Report(diagnostics, InvalidView, location, $"'{view}' must have exactly one public constructor.");
+                return Finish();
             }
 
-            var generatedInterface = compilation.GetTypeByMetadataName(BindingNamespace + ".IGeneratedViewBinding");
+            var generatedInterface = compilation.GetTypeByMetadataName($"{BindingNamespace}.IGeneratedViewBinding");
             if (controller.AllInterfaces.Any(type => Same(type, generatedInterface)) ||
                 HasBoundBase(controller, binding.AttributeClass))
             {
-                Report(context, InvalidController, location, $"'{controller}' already implements or inherits a generated view binding.");
-                return;
+                Report(diagnostics, InvalidController, location, $"'{controller}' already implements or inherits a generated view binding.");
+                return Finish();
             }
 
-            foreach (var callback in ReservedCallbacks)
+            foreach (string callback in ReservedCallbacks)
             {
-                for (INamedTypeSymbol? type = controller; type != null; type = type.BaseType)
+                for (var type = controller; type != null; type = type.BaseType)
                 {
                     var member = type.GetMembers(callback).FirstOrDefault();
                     if (member == null)
                         continue;
                     var memberLocation = member.Locations.FirstOrDefault(item => item.IsInSource);
-                    Report(context, ReservedCallback, memberLocation ?? location,
+                    Report(diagnostics, ReservedCallback, memberLocation ?? location,
                         $"'{controller}' reserves Unity callback '{callback}', already declared on '{type}'.");
-                    return;
+                    return Finish();
                 }
             }
 
             var arguments = new List<string>();
             foreach (var parameter in constructors[0].Parameters)
             {
-                var expression = GetArgument(compilation, parameter, contract);
+                string? expression = GetArgument(compilation, parameter, contract, controller);
                 if (expression == null)
                 {
-                    Report(context, InvalidParameter, location,
-                        $"'{view}' parameter '{parameter.Name}' ({parameter.Type}) needs the declared view contract, IArchitecture, an unambiguous System/Model type, or a concrete Plugin type.");
-                    return;
+                    Report(diagnostics, InvalidParameter, location,
+                        $"'{view}' parameter '{parameter.Name}' ({parameter.Type}) needs the declared view contract, IArchitecture, an unambiguous System/Model type, or a concrete Plugin type requested by a controller implementing ICanGetPlugin.");
+                    return Finish();
                 }
                 arguments.Add(expression);
             }
 
             UIBindingPlan? plan = null;
+            var surface = UIBindingSurface.Resolve(compilation);
             if (surface.Available)
             {
-                var result = UIBindingPlanner.Plan(compilation, controller, view, surface, context.CancellationToken);
+                var result = UIBindingPlanner.Plan(compilation, controller, view, surface, ct);
                 foreach (var diagnostic in result.Diagnostics)
-                    context.ReportDiagnostic(diagnostic);
+                    diagnostics.Add(DiagnosticResult.From(diagnostic));
                 plan = result.Plan;
             }
 
-            Emit(context, controller, view, arguments, plan != null);
-            if (plan != null)
-                UIBindingEmitter.Emit(context, plan);
+            return Finish(BuildSource(controller, view, arguments, plan != null),
+                plan != null ? UIBindingEmitter.Build(plan) : null);
+
+            GenerationResult Finish(string? source = null, string? uiSource = null) =>
+                new GenerationResult(name, source, uiSource, diagnostics.ToImmutableArray());
         }
 
-        private static string? GetArgument(Compilation compilation, IParameterSymbol parameter, INamedTypeSymbol contract)
+        private static void EmitResult(SourceProductionContext output, GenerationResult result)
         {
-            if (parameter.RefKind != RefKind.None || !(parameter.Type is INamedTypeSymbol type) ||
+            if (result.Source != null)
+                output.AddSource($"{result.Name}.ViewBinding.g.cs", SourceText.From(result.Source, Encoding.UTF8));
+            if (result.UISource != null)
+                output.AddSource($"{result.Name}.UIBinding.g.cs", SourceText.From(result.UISource, Encoding.UTF8));
+            foreach (var diagnostic in result.Diagnostics)
+                output.ReportDiagnostic(diagnostic.ToDiagnostic());
+        }
+
+        private static DiagnosticResult? FindMissingBindView(GeneratorAttributeSyntaxContext item, CancellationToken ct)
+        {
+            if (item.TargetSymbol is not IFieldSymbol field)
+                return null;
+            var type = field.ContainingType;
+            var compilation = item.SemanticModel.Compilation;
+            if (!UIBindingSurface.Resolve(compilation).Available)
+                return null;
+            if (type.GetAttributes().Any(attribute =>
+                    Same(attribute.AttributeClass, compilation.GetTypeByMetadataName(
+                        $"{BindingNamespace}.BindViewAttribute"))))
+                return null;
+
+            var dataAttribute = compilation.GetTypeByMetadataName(UIBindingSurface.DataAttributeName);
+            var commandAttribute = compilation.GetTypeByMetadataName(UIBindingSurface.CommandAttributeName);
+            foreach (var member in type.GetMembers().OfType<IFieldSymbol>())
+            {
+                var first = member.GetAttributes().FirstOrDefault(attribute =>
+                    Same(attribute.AttributeClass, dataAttribute) || Same(attribute.AttributeClass, commandAttribute));
+                if (first == null)
+                    continue;
+                if (!Same(member, field) || !item.Attributes.Any(attribute => Same(attribute.AttributeClass, first.AttributeClass)))
+                    return null;
+                var location = first.ApplicationSyntaxReference?.GetSyntax(ct).GetLocation();
+                return DiagnosticResult.Create(UIBindingDiagnostics.MissingBindView, location,
+                    $"'{type}' declares [UIBindData]/[UIBindCommand] fields but has no [BindView(typeof(View), typeof(Contract))] attribute, so no engine binding is generated.");
+            }
+            return null;
+        }
+
+        private static void Report(SourceProductionContext output, DiagnosticResult? diagnostic)
+        {
+            if (diagnostic.HasValue)
+                output.ReportDiagnostic(diagnostic.Value.ToDiagnostic());
+        }
+
+        private static void Report(List<DiagnosticResult> diagnostics, DiagnosticDescriptor descriptor,
+            Location? location, string message) =>
+            diagnostics.Add(DiagnosticResult.Create(descriptor, location, message));
+
+        private static string? GetArgument(Compilation compilation, IParameterSymbol parameter,
+            INamedTypeSymbol contract, INamedTypeSymbol controller)
+        {
+            if (parameter.RefKind != RefKind.None || parameter.Type is not INamedTypeSymbol type ||
                 (type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Interface))
                 return null;
             if (Same(type, contract))
                 return $"({Qualified(contract)})this";
-            if (Same(type, compilation.GetTypeByMetadataName(CoreNamespace + "IArchitecture")))
+            if (Same(type, compilation.GetTypeByMetadataName($"{CoreNamespace}IArchitecture")))
                 return "architecture";
 
-            var system = Implements("ISystem");
-            var model = Implements("IModel");
-            var plugin = Implements("IPlugin");
+            bool system = Implements("ISystem");
+            bool model = Implements("IModel");
+            bool plugin = Implements("IPlugin");
             if ((system ? 1 : 0) + (model ? 1 : 0) + (plugin ? 1 : 0) != 1)
                 return null;
             if (plugin && (type.TypeKind != TypeKind.Class || type.IsAbstract))
                 return null;
 
-            var method = system ? "GetSystem" : model ? "GetModel" : "GetPlugin";
+            if (plugin)
+            {
+                var capability = compilation.GetTypeByMetadataName($"{CoreNamespace}ICanGetPlugin");
+                if (capability == null || !controller.AllInterfaces.Any(item => Same(item, capability)))
+                    return null;
+                return $"global::ObFramework.Extension.ICanExtension.GetPlugin<{Qualified(type)}>(this)";
+            }
+
+            string method = system ? "GetSystem" : "GetModel";
             return $"architecture.{method}<{Qualified(type)}>()";
 
             bool Implements(string name)
@@ -218,13 +239,13 @@ namespace ObFramework.Generator.Unity
 
         private static bool DerivesFrom(INamedTypeSymbol type, INamedTypeSymbol? baseType)
         {
-            for (INamedTypeSymbol? current = type; current != null; current = current.BaseType)
+            for (var current = type; current != null; current = current.BaseType)
                 if (Same(current, baseType))
                     return true;
             return false;
         }
 
-        private static void Emit(GenerationContext context, INamedTypeSymbol controller, INamedTypeSymbol view,
+        private static string BuildSource(INamedTypeSymbol controller, INamedTypeSymbol view,
             List<string> arguments, bool uiBindings)
         {
             var source = new StringBuilder("// <auto-generated/>\n");
@@ -232,8 +253,8 @@ namespace ObFramework.Generator.Unity
             if (!space.IsGlobalNamespace)
                 source.Append("namespace ").Append(space.ToDisplayString()).AppendLine(" {");
 
-            var generated = "global::" + BindingNamespace + ".IGeneratedViewBinding";
-            var callbacks = "global::" + BindingNamespace + ".GeneratedViewBinding";
+            string generated = $"global::{BindingNamespace}.IGeneratedViewBinding";
+            string callbacks = $"global::{BindingNamespace}.GeneratedViewBinding";
             source.Append("partial class @").Append(controller.Name).Append(" : ").Append(generated).AppendLine(" {");
             source.Append("    global::System.Type ").Append(generated).Append(".ControllerType => typeof(")
                 .Append(Qualified(controller)).AppendLine(");");
@@ -275,7 +296,7 @@ namespace ObFramework.Generator.Unity
                 source.Append("    object ").Append(generated).Append(".CreateView(global::").Append(CoreNamespace)
                     .Append("IArchitecture architecture) => new ").Append(Qualified(view)).Append('(')
                     .Append(string.Join(", ", arguments)).AppendLine(");");
-                foreach (var callback in ReservedCallbacks)
+                foreach (string callback in ReservedCallbacks)
                     source.Append("    private void ").Append(callback).Append("() => ").Append(callbacks)
                         .Append('.').Append(callback).AppendLine("(this);");
             }
@@ -283,44 +304,94 @@ namespace ObFramework.Generator.Unity
             if (!space.IsGlobalNamespace)
                 source.AppendLine("}");
 
-            context.AddSource(controller.ToDisplayString() + ".ViewBinding.g.cs", SourceText.From(source.ToString(), Encoding.UTF8));
+            return source.ToString();
         }
 
-        private static void ReportMissingBindView(GenerationContext context, IEnumerable<INamedTypeSymbol> candidateTypes,
-            INamedTypeSymbol bindViewAttribute, HashSet<INamedTypeSymbol> controllers)
+        private sealed class GenerationResult : IEquatable<GenerationResult>
         {
-            var dataAttributes = new[]
-            {
-                BindingNamespace + ".UIBindDataAttribute",
-                BindingNamespace + ".UIBindCommandAttribute"
-            };
+            public readonly string Name;
+            public readonly string? Source;
+            public readonly string? UISource;
+            public readonly ImmutableArray<DiagnosticResult> Diagnostics;
 
-            foreach (var type in candidateTypes.OrderBy(static item => item.ToDisplayString(), StringComparer.Ordinal))
+            public GenerationResult(string name, string? source, string? uiSource, ImmutableArray<DiagnosticResult> diagnostics)
             {
-                if (controllers.Contains(type) ||
-                    type.GetAttributes().Any(item => Same(item.AttributeClass, bindViewAttribute)))
-                    continue;
+                Name = name;
+                Source = source;
+                UISource = uiSource;
+                Diagnostics = diagnostics;
+            }
 
-                Location? location = null;
-                foreach (var field in type.GetMembers().OfType<IFieldSymbol>())
+            public bool Equals(GenerationResult? other) =>
+                other != null && Name == other.Name && Source == other.Source &&
+                UISource == other.UISource && Diagnostics.SequenceEqual(other.Diagnostics);
+
+            public override bool Equals(object? other) => Equals(other as GenerationResult);
+            public override int GetHashCode()
+            {
+                unchecked
                 {
-                    var dataAttribute = field.GetAttributes().FirstOrDefault(attribute =>
-                        attribute.AttributeClass != null &&
-                        dataAttributes.Contains(attribute.AttributeClass.ToDisplayString(), StringComparer.Ordinal));
-                    if (dataAttribute == null)
-                        continue;
-
-                    location = dataAttribute.ApplicationSyntaxReference?
-                        .GetSyntax(context.CancellationToken)
-                        .GetLocation();
-                    break;
+                    int hash = Name.GetHashCode();
+                    hash = hash * 31 + (Source?.GetHashCode() ?? 0);
+                    hash = hash * 31 + (UISource?.GetHashCode() ?? 0);
+                    foreach (var diagnostic in Diagnostics)
+                        hash = hash * 31 + diagnostic.GetHashCode();
+                    return hash;
                 }
+            }
+        }
 
-                if (location == null)
-                    continue;
+        private readonly struct DiagnosticResult : IEquatable<DiagnosticResult>
+        {
+            private readonly DiagnosticDescriptor _descriptor;
+            private readonly string _message;
+            private readonly string? _path;
+            private readonly TextSpan _span;
+            private readonly LinePositionSpan _lineSpan;
 
-                context.ReportDiagnostic(Diagnostic.Create(UIBindingDiagnostics.MissingBindView, location,
-                    $"'{type}' declares [UIBindData]/[UIBindCommand] fields but has no [BindView(typeof(View), typeof(Contract))] attribute, so no engine binding is generated."));
+            private DiagnosticResult(DiagnosticDescriptor descriptor, string message, Location? location)
+            {
+                _descriptor = descriptor;
+                _message = message;
+                if (location != null && location.IsInSource)
+                {
+                    var span = location.GetLineSpan();
+                    _path = span.Path;
+                    _span = location.SourceSpan;
+                    _lineSpan = span.Span;
+                }
+                else
+                {
+                    _path = null;
+                    _span = default;
+                    _lineSpan = default;
+                }
+            }
+
+            public static DiagnosticResult Create(DiagnosticDescriptor descriptor, Location? location, string message) =>
+                new DiagnosticResult(descriptor, message, location);
+
+            public static DiagnosticResult From(Diagnostic diagnostic) =>
+                new DiagnosticResult(diagnostic.Descriptor, diagnostic.GetMessage(), diagnostic.Location);
+
+            public Diagnostic ToDiagnostic() => Diagnostic.Create(_descriptor,
+                _path == null ? Location.None : Location.Create(_path, _span, _lineSpan), _message);
+
+            public bool Equals(DiagnosticResult other) =>
+                _descriptor.Id == other._descriptor.Id && _message == other._message &&
+                _path == other._path && _span.Equals(other._span) && _lineSpan.Equals(other._lineSpan);
+
+            public override bool Equals(object? other) => other is DiagnosticResult otherResult && Equals(otherResult);
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = _descriptor.Id.GetHashCode();
+                    hash = hash * 31 + _message.GetHashCode();
+                    hash = hash * 31 + (_path?.GetHashCode() ?? 0);
+                    hash = hash * 31 + _span.GetHashCode();
+                    return hash * 31 + _lineSpan.GetHashCode();
+                }
             }
         }
 
@@ -333,7 +404,5 @@ namespace ObFramework.Generator.Unity
         private static DiagnosticDescriptor Error(string id, string title) =>
             new(id, title, "{0}", "ViewBinding", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-        private static void Report(GenerationContext context, DiagnosticDescriptor descriptor, Location? location, string message) =>
-            context.ReportDiagnostic(Diagnostic.Create(descriptor, location, message));
     }
 }

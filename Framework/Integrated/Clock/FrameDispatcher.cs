@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-// ReSharper disable ConvertIfStatementToSwitchStatement
 
-namespace ObFramework.Core.FrameLoop
+namespace ObFramework.Integrated.Clock
 {
     public class FrameDispatcher
     {
         private readonly Phase<ITickable> _tickables = new();
         private readonly Phase<IFixedTickable> _fixedTickables = new();
         private readonly Phase<ILateTickable> _lateTickables = new();
-
+        private readonly Phase<ILogicTickable> _logicTickables = new();
         public void Register(IFrameTickable instance)
         {
             if (instance is ITickable tickable)
@@ -18,6 +17,8 @@ namespace ObFramework.Core.FrameLoop
                 _fixedTickables.Add(fixedTickable);
             if (instance is ILateTickable lateTickable)
                 _lateTickables.Add(lateTickable);
+            if (instance is ILogicTickable logicTickable)
+                _logicTickables.Add(logicTickable);
         }
         public void UnRegister(IFrameTickable instance)
         {
@@ -27,16 +28,18 @@ namespace ObFramework.Core.FrameLoop
                 _fixedTickables.Remove(fixedTickable);
             if (instance is ILateTickable lateTickable)
                 _lateTickables.Remove(lateTickable);
+            if (instance is ILogicTickable logicTickable)
+                _logicTickables.Remove(logicTickable);
         }
-
-        public void Dispatch() => Dispatch(null);
-        public void DispatchFixed() => DispatchFixed(null);
-        public void DispatchLate() => DispatchLate(null);
-
-        public void Dispatch(Func<bool>? canContinue) => _tickables.Dispatch(t => t.Tick(), canContinue);
-        public void DispatchFixed(Func<bool>? canContinue) => _fixedTickables.Dispatch(t => t.FixedTick(), canContinue);
-        public void DispatchLate(Func<bool>? canContinue) => _lateTickables.Dispatch(t => t.LateTick(), canContinue);
-
+        
+        public void Dispatch(Func<bool>? canContinue = null) => 
+            _tickables.Dispatch(t => t.Tick(), canContinue);
+        public void DispatchFixed(Func<bool>? canContinue = null) => 
+            _fixedTickables.Dispatch(t => t.FixedTick(), canContinue);
+        public void DispatchLate(Func<bool>? canContinue = null) => 
+            _lateTickables.Dispatch(t => t.LateTick(), canContinue);
+        public void DispatchLogic() =>
+            _logicTickables.Dispatch(t => t.LogicTick(), null);
         private sealed class Phase<T> where T : class
         {
             private readonly Dictionary<T, LinkedListNode<T?>> _registered = new();

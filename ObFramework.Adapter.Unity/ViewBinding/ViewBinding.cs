@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using ObFramework.Core;
-using ObFramework.Core.FrameLoop;
+using ObFramework.Extension.Integrated;
+using ObFramework.Integrated.Clock;
 using UnityEngine;
 
 namespace ObFramework.Adapter.Unity.ViewBinding
@@ -50,6 +51,8 @@ namespace ObFramework.Adapter.Unity.ViewBinding
                     AddRegistration(new FixedRegistration(fixedTick));
                 if (view is ILateTickable lateTick)
                     AddRegistration(new LateRegistration(lateTick));
+                if (view is ILogicTickable logicTick)
+                    AddRegistration(new LogicRegistration(logicTick));
 
                 ChangeEnabled(Controller && Controller.isActiveAndEnabled);
             }
@@ -106,8 +109,7 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             }
         }
 
-        private bool CanTick =>
-            _notifiedEnabled && Controller && Controller.isActiveAndEnabled && _owner.IsReady;
+        private bool CanTick => _notifiedEnabled && Controller && Controller.isActiveAndEnabled && _owner.IsReady;
 
         public bool TryStartDeferredTick()
         {
@@ -120,12 +122,12 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             return true;
         }
 
-        private void AddRegistration(IFrameTickable tick) => (_ticks ??= new List<IFrameTickable>(3)).Add(tick);
+        private void AddRegistration(IFrameTickable tick) => (_ticks ??= new List<IFrameTickable>(4)).Add(tick);
 
         private void StartTick()
         {
             foreach (var tick in _ticks!)
-                _owner.Frame.Register(tick);
+                tick.Register((IController)_view!);
         }
 
         private void StopTick()
@@ -134,7 +136,7 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             if (_ticks == null)
                 return;
             foreach (var tick in _ticks)
-                _owner.Frame.UnRegister(tick);
+                tick.UnRegister((IController)_view!);
         }
 
         public void Release()
@@ -187,6 +189,13 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             private readonly IFixedTickable _view;
             public FixedRegistration(IFixedTickable view) => _view = view;
             public void FixedTick() => _view.FixedTick();
+        }
+
+        private sealed class LogicRegistration : ILogicTickable
+        {
+            private readonly ILogicTickable _view;
+            public LogicRegistration(ILogicTickable view) => _view = view;
+            public void LogicTick() => _view.LogicTick();
         }
 
         private sealed class LateRegistration : ILateTickable
