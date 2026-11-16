@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace ObFramework.Integrated.Clock
@@ -38,8 +38,8 @@ namespace ObFramework.Integrated.Clock
             _fixedTickables.Dispatch(t => t.FixedTick(), canContinue);
         public void DispatchLate(Func<bool>? canContinue = null) => 
             _lateTickables.Dispatch(t => t.LateTick(), canContinue);
-        public void DispatchLogic() =>
-            _logicTickables.Dispatch(t => t.LogicTick(), null);
+        public void DispatchLogic(Func<bool>? canContinue = null) =>
+            _logicTickables.Dispatch(t => t.LogicTick(), canContinue);
         private sealed class Phase<T> where T : class
         {
             private readonly Dictionary<T, LinkedListNode<T?>> _registered = new();

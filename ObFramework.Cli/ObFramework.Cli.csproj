@@ -52,6 +52,11 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="Config\" />
       <Folder Include="Init\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Remove="Config\ConfigCliModule.cs" />
     </ItemGroup>
 </Project>

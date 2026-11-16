@@ -1,4 +1,4 @@
-﻿using ObFramework.Core;
+using ObFramework.Core;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,12 +15,16 @@ namespace ObFramework.Extension
             self.GetArchitecture().GetSystem<T>();
         public static void SendCommand<T>(this ICanSendCommand self) where T : ICommand, new() =>
             self.GetArchitecture().SendCommand(new T());
+        public static void SendCommand(this ICanSendCommand self, ICommand command) =>
+            self.GetArchitecture().SendCommand(command);
         public static TResult SendCommand<TResult>(this ICanSendCommand self, ICommand<TResult> command) =>
             self.GetArchitecture().SendCommand(command);
-        public static ValueTask SendCommandAsync<T>(this ICanSendCommand self, CancellationTokenSource cts = default) where T : IAsyncCommand, new() =>
-            self.GetArchitecture().SendCommandAsync(new T(), cts.Token);
-        public static ValueTask<TResult> SendCommandAsync<TResult>(this ICanSendCommand self, IAsyncCommand<TResult> command, CancellationTokenSource cts = default) =>
-            self.GetArchitecture().SendCommandAsync(command, cts.Token);
+        public static ValueTask SendCommandAsync<T>(this ICanSendCommand self, CancellationToken ct = default) where T : IAsyncCommand, new() =>
+            self.GetArchitecture().SendCommandAsync(new T(), ct);
+        public static ValueTask SendCommandAsync(this ICanSendCommand self, IAsyncCommand command, CancellationToken ct = default) =>
+            self.GetArchitecture().SendCommandAsync(command, ct);
+        public static ValueTask<TResult> SendCommandAsync<TResult>(this ICanSendCommand self, IAsyncCommand<TResult> command, CancellationToken ct = default) =>
+            self.GetArchitecture().SendCommandAsync(command, ct);
         public static IDisposable RegisterEvent<T>(this ICanRegisterEvent self, Action<T> onEvent) where T : struct =>
             self.GetArchitecture().RegisterEvent(onEvent);
         public static void SendEvent<T>(this ICanSendEvent self, T e) where T : struct =>
@@ -31,8 +35,10 @@ namespace ObFramework.Extension
             => self.GetArchitecture().RegisterLocalService<I, T>(self);
         public static T GetLocalService<T>(this ICanRegisterService self) where T : class, IService
             => self.GetArchitecture().GetLocalService<T>(self);
-        public static IRuntimeDataGroup<TResult> Query<TQuery, TResult>(this ICanQuery self, bool refresh = false)
-            where TQuery : class, IQuery<TResult>, new() where TResult : class, IRuntimeData
-            => self.GetArchitecture().SendQuery<TQuery, TResult>(refresh);
+        public static TResult Query<TQuery, TResult>(this ICanQuery self)
+            where TQuery : class, IQuery<TResult>, new()
+            => self.GetArchitecture().SendQuery<TQuery, TResult>();
+        public static TResult Query<TResult>(this ICanQuery self, IQuery<TResult> query)
+            => self.GetArchitecture().SendQuery(query);
     }
 }

@@ -46,15 +46,9 @@ public class PluginArchitectureTest
     {
         public override CounterPlugin Execute() => this.GetPlugin<CounterPlugin>();
     }
-    public sealed class CounterData : IRuntimeData
+    public sealed class CounterQuery : AQuery<CounterPlugin>
     {
-        public string Id => "counter";
-        public CounterPlugin Counter { get; }
-        public CounterData(CounterPlugin counter) => Counter = counter;
-    }
-    public sealed class CounterQuery : AQuery<CounterData>
-    {
-        protected override void OnRefresh() => _data["counter"] = new CounterData(this.GetPlugin<CounterPlugin>());
+        public override CounterPlugin Q() => this.GetPlugin<CounterPlugin>();
     }
     [Test]
     public async Task ArchitecturesAndBusinessObjectsShareTheSamePluginInstance()
@@ -77,9 +71,8 @@ public class PluginArchitectureTest
             Assert.That(first.PublicServiceContext, Is.SameAs(host.Context));
             Assert.Throws<VContainerException>(() => first.ResolveCounter());
             Assert.That(first.SendCommand(new CounterCommand()), Is.SameAs(counter));
-            var query = ((IArchitecture)first).SendQuery<CounterQuery, CounterData>();
-            Assert.That(query.TryGet("counter", out var data), Is.True);
-            Assert.That(data!.Counter, Is.SameAs(counter));
+            var query = ((IArchitecture)first).SendQuery<CounterQuery, CounterPlugin>();
+            Assert.That(query, Is.SameAs(counter));
             first.Deinit();
             Assert.That(second.GetPlugin<CounterPlugin>(), Is.SameAs(counter));
             Assert.That(counter.Stops, Is.Zero);

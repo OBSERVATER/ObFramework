@@ -1,4 +1,4 @@
-﻿using ObFramework.Core;
+using ObFramework.Core;
 using ObFramework.Extension;
 
 namespace ObFramework.Test.Core;
@@ -83,21 +83,9 @@ internal class CoreArchitectureTest
             return this.GetModel<ITestModel>().Get();
         }
     }
-    internal class TestRuntimeData : IRuntimeData
+    internal class TestQuery : AQuery<int>
     {
-        public int Value { get; set; }
-
-        public string Id => "1";
-    }
-    internal class TestQuery : AQuery<TestRuntimeData>
-    {
-        protected override void OnRefresh()
-        {
-            _data.GetOrAdd("1", new()
-            {
-                Value = this.GetModel<ITestModel>().Get(),
-            });
-        }
+        public override int Q() => this.GetModel<ITestModel>().Get();
     }
     [Test]
     public async Task CoreTest_BasicCoreEvent()
@@ -117,8 +105,7 @@ internal class CoreArchitectureTest
             {
                 Assert.That(result2, Is.EqualTo(20));
                 Assert.That(self.GetModel<ITestModel>().Get(), Is.EqualTo(20));
-                Assert.That(self.SendQuery<TestQuery, TestRuntimeData>().TryGet("1", out var val), Is.EqualTo(true));
-                Assert.That(val.Value, Is.EqualTo(20));
+                Assert.That(self.SendQuery<TestQuery, int>(), Is.EqualTo(20));
             });
         }
         finally

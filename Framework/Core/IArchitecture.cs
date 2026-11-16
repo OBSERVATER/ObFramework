@@ -1,4 +1,4 @@
-﻿using MessagePipe;
+using MessagePipe;
 using ObFramework.Core.Service;
 using ObFramework.Extension;
 using System;
@@ -23,7 +23,8 @@ namespace ObFramework.Core
         T GetLocalService<T>(ICanRegisterService self) where T : class, IService;
         T GetPlugin<T>() where T : class, IPlugin;
         
-        IRuntimeDataGroup<TResult> SendQuery<TQuery, TResult>(bool refresh = false) where TQuery : class, IQuery<TResult>, new() where TResult : class, IRuntimeData;
+        TResult SendQuery<TQuery, TResult>() where TQuery : class, IQuery<TResult>, new();
+        TResult SendQuery<TResult>(IQuery<TResult> query);
         void SendCommand<T>(T command) where T : ICommand;
         TResult SendCommand<TResult>(ICommand<TResult> command);
         ValueTask SendCommandAsync<T>(T command, CancellationToken ct = default) where T : IAsyncCommand;
@@ -81,7 +82,6 @@ namespace ObFramework.Core
             var architecture = new T();
             Architecture = architecture;
             architecture._plugins = plugins;
-            new FrameDispatcher();
             var builder = new ContainerBuilder();
             architecture._lifecycleService = new ArchitectureLifecycleCoordinator(builder, architecture);
             try
@@ -158,7 +158,15 @@ namespace ObFramework.Core
         T1 IArchitecture.GetModel<T1>() => Resolver.Resolve<T1>();
         T1 IArchitecture.GetSystem<T1>() => Resolver.Resolve<T1>();
         T1 IArchitecture.GetPlugin<T1>() => Plugins.Get<T1>();
-        IRuntimeDataGroup<TResult> IArchitecture.SendQuery<TQuery, TResult>(bool refresh) => Resolver.Resolve<IQueryService>().SendQuery<TQuery, TResult>(refresh);
+        public TResult SendQuery<TQuery, TResult>() where TQuery : class, IQuery<TResult>, new()
+            => SendQuery<TResult>(new TQuery());
+
+        public TResult SendQuery<TResult>(IQuery<TResult> query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            query.SetArchitecture(this);
+            return query.Q();
+        }
         T1 IArchitecture.GetLocalService<T1>(ICanRegisterService self) => _lifecycleService.GetLocalService<T1>(self);
 
         protected void RegisterPubService<I, T1>() where I : IService where T1 : class, I => _lifecycleService.RegisterPubService<I, T1>();
@@ -167,7 +175,6 @@ namespace ObFramework.Core
         private static void RegisterServiceInternal()
         {
             Architecture.RegisterPubService<IEventBus, EventBus>();
-            Architecture.RegisterPubService<IQueryService, QueryService>();
         }
     }
 }

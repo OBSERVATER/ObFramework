@@ -1,39 +1,27 @@
-﻿using System.Collections.Generic;
+﻿using System;
 
 namespace ObFramework.Core
 {
-    public interface IQuery<TResult> : ICanGetPlugin, IBelongToArchitecture, ICanSetArchitecture, ICanGetSystem, ICanGetModel, ICanQuery where TResult : class, IRuntimeData
+    /// <summary>Reads current business data. Queries must not refresh or mutate their data sources.</summary>
+    public interface IQuery<out TResult> : ICanGetPlugin, IBelongToArchitecture, ICanSetArchitecture, ICanGetSystem, ICanGetModel, ICanQuery
     {
-        IRuntimeDataGroup<TResult> Q(bool refresh = false);
-        void Refresh();
+        TResult Q();
     }
-    public abstract class AQuery<TResult> : IQuery<TResult> where TResult : class, IRuntimeData
+
+    /// <summary>
+    /// A read operation whose parameters may be supplied by its constructor.
+    /// Results are not cached or copied; the query determines the returned value's shape.
+    /// </summary>
+    public abstract class AQuery<TResult> : IQuery<TResult>
     {
-        private IArchitecture _arch;
-        protected readonly Dictionary<string, TResult> _data = new Dictionary<string, TResult>();
-        private readonly IRuntimeDataGroup<TResult> _group;
-        private bool _initialized;
+        private IArchitecture? _architecture;
 
-        protected AQuery()
-        {
-            _group = new DefaultRuntimeDataGroup<TResult>(_data);
-        }
-        public void SetArchitecture(IArchitecture architecture) => _arch = architecture;
-        public IArchitecture GetArchitecture() => _arch;
+        public void SetArchitecture(IArchitecture architecture) =>
+            _architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
 
-        public IRuntimeDataGroup<TResult> Q(bool refresh = false)
-        {
-            if (refresh || !_initialized)
-                Refresh();
+        public IArchitecture GetArchitecture() => _architecture
+            ?? throw new InvalidOperationException("Query is not attached to an architecture.");
 
-            return _group;
-        }
-
-        public void Refresh()
-        {
-            OnRefresh();
-            _initialized = true;
-        }
-        protected abstract void OnRefresh();
+        public abstract TResult Q();
     }
 }
