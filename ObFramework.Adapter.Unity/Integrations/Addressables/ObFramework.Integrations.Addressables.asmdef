@@ -1,0 +1,8 @@
+{
+  "name": "ObFramework.Integrations.Addressables",
+  "rootNamespace": "ObFramework.Adapter.Unity.Resource",
+  "references": ["Unity.Addressables", "Unity.ResourceManager"],
+  "autoReferenced": true,
+  "overrideReferences": false,
+  "noEngineReferences": false
+}

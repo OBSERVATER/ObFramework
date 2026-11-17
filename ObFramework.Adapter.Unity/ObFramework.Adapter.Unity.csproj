@@ -1,11 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+    <Description>Unity lifecycle and UI bindings for ObFramework. Resource backends are optional and supplied by the project.</Description>
+    <PackageTags>ObFramework;Unity;UI</PackageTags>
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>9</LangVersion>
-        <UnityEditorDataRoot>..\..\..\Program Files\Unity Editor\2022.3.58.f1\Editor\Data\Managed</UnityEditorDataRoot>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
     </PropertyGroup>
+
+    <Import Project="UnityReferences.props" />
 
     <!--
       One project, two build modes:
@@ -36,26 +41,22 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Framework\ObFramework.csproj" />
-      <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Unity.Addressables">
-        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.Addressables.dll</HintPath>
-      </Reference>
-      <Reference Include="Unity.ResourceManager">
-        <HintPath>..\..\..\Unity Program\ObFramework-example\Library\ScriptAssemblies\Unity.ResourceManager.dll</HintPath>
-      </Reference>
       <Reference Include="UnityEngine">
+        <Private>false</Private>
         <HintPath>$(UnityEditorDataRoot)\UnityEngine\UnityEngine.dll</HintPath>
       </Reference>
       <Reference Include="UnityEngine.CoreModule">
+        <Private>false</Private>
         <HintPath>$(UnityEditorDataRoot)\UnityEngine\UnityEngine.CoreModule.dll</HintPath>
       </Reference>
     </ItemGroup>
 
     <ItemGroup>
       <Compile Remove="EditorDeploy/**/*.cs" />
+      <Compile Remove="Integrations/**/*.cs" />
       <Folder Include="Asset\" />
     </ItemGroup>
 
@@ -89,15 +90,15 @@
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </EmbeddedResource>
     </ItemGroup>
+    <!-- Editor tools and optional integrations are deployed only by the CLI, never imported twice from NuGet contentFiles. -->
 
-    <!-- The Adapter NuGet package carries the deployable Unity Editor resources as content files,
-         so an installed package also provides them for inspection (the CLI reads its own embedded
-         copy; do not deploy both copies into the same Unity project). -->
-    <ItemGroup>
-      <None Include="EditorDeploy/**/*"
-            Pack="true"
-            WithCulture="false"
-            PackagePath="contentFiles/any/any/UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)" />
-    </ItemGroup>
-
+  <Target Name="ValidateUnityReferencePath" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(UnityEditorDataRoot)/UnityEngine/UnityEngine.CoreModule.dll')"
+           Text="Unity reference DLLs were not found at &quot;$(UnityEditorDataRoot)&quot;. Install Unity 2022.3 or newer in a detected location, set UnityEditorsRoot to an installation parent directory, or set UnityEditorPath / UnityEditorDataRoot explicitly. Unity reference DLLs are build-only and are never bundled." />
+  </Target>
+  <PropertyGroup><PackageReadmeFile>README.md</PackageReadmeFile></PropertyGroup>
+  <ItemGroup>
+    <None Remove="../ObFramework.Cli/Resources/UnityGuide.md" />
+    <None Include="../ObFramework.Cli/Resources/UnityGuide.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
 </Project>

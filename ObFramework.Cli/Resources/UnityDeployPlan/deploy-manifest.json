@@ -35,5 +35,6 @@
       "kind": "meta",
       "description": "RoslynAnalyzer import settings for the Unity binding generator"
     }
-  ]
+  ],
+  "requireComplete": true
 }

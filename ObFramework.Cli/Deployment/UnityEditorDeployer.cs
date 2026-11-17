@@ -81,6 +81,22 @@ namespace ObFramework.Cli.Deployment
                 ? new Dictionary<string, OwnedDeploymentFile>(StringComparer.OrdinalIgnoreCase)
                 : existingOwned.Files.ToDictionary(static file => file.Path, StringComparer.OrdinalIgnoreCase);
 
+            if (_manifest.RequireComplete)
+            {
+                foreach (var file in planned)
+                {
+                    if (file.Content == null)
+                        throw new DeploymentException($"Required deployment resource '{file.SourcePath}' is missing. Rebuild the CLI package.");
+                    var target = DeploymentPaths.CombineWithinRoot(projectRoot, file.Entry.Target, "deployment target");
+                    if (!File.Exists(target)) continue;
+                    if (!ownedFiles.TryGetValue(file.Entry.Target, out var owned))
+                        throw new DeploymentException($"Required target '{file.Entry.Target}' already exists and is not owned by ob; preserve/move it before retrying.");
+                    var content = File.ReadAllBytes(target);
+                    if (!content.AsSpan().SequenceEqual(file.Content) && DeploymentHash.ComputeSha256(content) != owned.Sha256)
+                        throw new DeploymentException($"Required target '{file.Entry.Target}' was modified by the user; preserve/move it before retrying.");
+                }
+            }
+
             var changes = new List<DeploymentFileChange>();
             var warnings = new List<string>();
             var deployedFiles = new List<OwnedDeploymentFile>();

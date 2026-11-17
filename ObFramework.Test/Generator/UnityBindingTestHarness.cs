@@ -375,18 +375,13 @@ internal static class UnityBindingTestHarness
             var returned = method.Invoke(null, null);
             if (returned is Task task)
                 task.GetAwaiter().GetResult();
+            if (returned is false)
+                throw new InvalidOperationException($"Exercise '{typeName}.Run' returned false.");
         }
         catch (TargetInvocationException exception) when (exception.InnerException != null)
         {
             ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
         }
-    }
-
-    public static string GetGeneratedSource(UnityBindingCompilation compilation, string suffix)
-    {
-        return string.Join(
-            Environment.NewLine + Environment.NewLine,
-            compilation.GeneratedSources.Where(text => text.Contains(suffix, StringComparison.Ordinal)));
     }
 
     public static string FormatDiagnostics(IEnumerable<Diagnostic> diagnostics)

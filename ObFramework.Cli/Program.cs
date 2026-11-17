@@ -16,6 +16,7 @@ namespace ObFramework.Cli
             ConfigCliModule.Register(cli);
             InitCliModule.Register(cli);
             TableCliModule.Register(cli);
+            ObFramework.Cli.Deployment.UnityDeployCliModule.Register(cli);
 
             // 非交互模式：直接执行后退出
             if (args.Length > 0)

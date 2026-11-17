@@ -10,6 +10,10 @@ namespace ObFramework.Cli.Commands.Init
             CancellationToken = cancellationToken;
         }
 
+        public string Resources { get; set; } = "custom";
+        public string PackageVersion { get; set; } = ObFramework.Cli.Unity.UnityPackageInstaller.DefaultVersion;
+        public string? Source { get; set; }
+        public bool SkipPackages { get; set; }
         public string Root { get; }
         public string SetupFile => Path.Combine(Root, "setup.json");
         public EngineKind Engine { get; }

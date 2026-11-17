@@ -46,6 +46,9 @@ namespace ObFramework.Cli.Core
                 config.AddCommand<ReferenceCommand>("reference")
                     .WithDescription("references among systems and models")
                     .WithData(_session);
+                config.AddCommand<DoctorCommand>("doctor")
+                    .WithDescription("diagnostics if project initialized normally.")
+                    .WithData(_session);
             });
 
             _initialized = true;

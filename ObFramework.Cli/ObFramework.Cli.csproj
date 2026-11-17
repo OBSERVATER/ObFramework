@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Description>ObFramework project initialization, NuGet restore, Unity tooling deployment and environment diagnostics.</Description>
+    <PackageTags>ObFramework;Unity;CLI</PackageTags>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -13,12 +15,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Framework\ObFramework.csproj" />
+    <ProjectReference Include="..\ObFramework.Generator\ObFramework.Generator.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
     <ProjectReference Include="..\ObFramework.Generator.Unity\ObFramework.Generator.Unity.csproj"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>
+    <ObfGeneratorDll Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::NormalizePath('$(ArtifactsPath)', 'bin', 'ObFramework.Generator', '$(Configuration.ToLowerInvariant())', 'ObFramework.Generator.dll'))</ObfGeneratorDll>
+    <ObfGeneratorDll Condition="'$(ObfGeneratorDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'ObFramework.Generator', 'bin', '$(Configuration)', 'netstandard2.0', 'ObFramework.Generator.dll'))</ObfGeneratorDll>
     <ObfUnityGeneratorDll Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::NormalizePath('$(ArtifactsPath)', 'bin', 'ObFramework.Generator.Unity', '$(Configuration.ToLowerInvariant())', 'ObFramework.Generator.Unity.dll'))</ObfUnityGeneratorDll>
     <ObfUnityGeneratorDll Condition="'$(ObfUnityGeneratorDll)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'ObFramework.Generator.Unity', 'bin', '$(Configuration)', 'netstandard2.0', 'ObFramework.Generator.Unity.dll'))</ObfUnityGeneratorDll>
   </PropertyGroup>
@@ -32,17 +37,15 @@
 		<EmbeddedResource Include="..\ObFramework.Adapter.Unity\EditorDeploy\**\*"
 						  LogicalName="ObFramework.Cli.UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)"
 						  WithCulture="false" />
-		<None Include="..\ObFramework.Adapter.Unity\EditorDeploy\**\*"
-			  Pack="true"
-			  WithCulture="false"
-			  PackagePath="contentFiles/any/any/UnityEditorDeploy/%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
   <Target Name="EmbedObfUnityGeneratorAnalyzer" BeforeTargets="AssignTargetPaths">
     <Error Condition="!$([System.IO.File]::Exists('$(ObfUnityGeneratorDll)'))"
            Text="ObFramework.Generator.Unity.dll was not found at $(ObfUnityGeneratorDll). Build ObFramework.Generator.Unity first (or build the CLI project normally, which builds it) so `ob init` can install the Unity Roslyn analyzer." />
+    <Error Condition="!Exists('$(ObfGeneratorDll)')" Text="Build ObFramework.Generator before embedding the CLI payload." />
     <ItemGroup>
+      <EmbeddedResource Include="$(ObfGeneratorDll)" LogicalName="ObFramework.Cli.UnityEditorDeploy/Analyzers/ObFramework.Generator.dll" WithCulture="false" />
       <EmbeddedResource Include="$(ObfUnityGeneratorDll)"
-                        LogicalName="ObFramework.Cli.UnityEditorDeploy/ObFramework.Generator.Unity.dll"
+                        LogicalName="ObFramework.Cli.UnityEditorDeploy/Analyzers/ObFramework.Generator.Unity.dll"
                         WithCulture="false" />
     </ItemGroup>
   </Target>
@@ -59,4 +62,15 @@
     <ItemGroup>
       <Compile Remove="Config\ConfigCliModule.cs" />
     </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/UnityEditorDeploy/Analyzers/*.meta" LogicalName="ObFramework.Cli.UnityEditorDeploy/Analyzers/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../ObFramework.Adapter.Unity/Integrations/Addressables/*" LogicalName="ObFramework.Cli.Addressables/%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Resources/UnityGuide.md" LogicalName="ObFramework.Cli.UnityGuide.md" />
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute"><_Parameter1>ObFramework.Test</_Parameter1></AssemblyAttribute>
+  </ItemGroup>
+  <PropertyGroup><PackageReadmeFile>README.md</PackageReadmeFile></PropertyGroup>
+  <ItemGroup>
+    <None Remove="Resources/UnityGuide.md" />
+    <None Include="Resources/UnityGuide.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
 </Project>

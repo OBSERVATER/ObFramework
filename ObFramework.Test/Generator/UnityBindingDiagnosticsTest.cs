@@ -118,11 +118,13 @@ public class UnityBindingDiagnosticsTest
                 [UIBindCommand(nameof(TestView.SubmitCommand))]
                 public UnityEngine.UI.Button SubmitButton;
             """;
-        var diagnostics = RunWithFields(fields);
+        var compilation = UnityBindingTestHarness.Generate(BindingSurfaceSource.Replace("__FIELDS__", fields));
         Assert.That(
-            UnityBindingTestHarness.FormatDiagnostics(diagnostics),
+            UnityBindingTestHarness.FormatDiagnostics(compilation.GeneratorDiagnostics),
             Is.Empty,
             "a valid binding declaration must be accepted");
+        Assert.That(compilation.EmitResult!.Success, Is.True,
+            UnityBindingTestHarness.FormatDiagnostics(compilation.EmitResult.Diagnostics));
     }
 
     private static IReadOnlyList<Diagnostic> RunWithFields(string fields)

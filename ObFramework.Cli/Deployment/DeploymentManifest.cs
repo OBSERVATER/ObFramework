@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -62,6 +58,9 @@ namespace ObFramework.Cli.Deployment
         /// This is what makes deployment tolerate a changing Editor resource set.
         /// </summary>
         public bool AutoDeployResources { get; init; }
+
+        /// <summary>Fail before deployment when any planned resource is missing or conflicts with user content.</summary>
+        public bool RequireComplete { get; init; }
 
         /// <summary>Optional glob patterns of resource paths that must not be deployed.</summary>
         public IReadOnlyList<string> Exclude { get; init; } = Array.Empty<string>();

@@ -1,0 +1,39 @@
+<Project>
+  <!-- Explicit properties (including environment variables) take precedence. Automatic discovery
+       runs before reference resolution for normal and design-time builds. -->
+  <PropertyGroup>
+    <UnityEditorPath Condition="'$(UnityEditorPath)' == '' and '$(UNITY_EDITOR_PATH)' != ''">$(UNITY_EDITOR_PATH)</UnityEditorPath>
+    <UnityEditorPath Condition="'$(UnityEditorPath)' != '' and Exists('$(UnityEditorPath)/Unity.exe')">$([System.IO.Path]::GetFullPath('$(UnityEditorPath)'))</UnityEditorPath>
+    <UnityEditorPath Condition="'$(UnityEditorPath)' != '' and Exists('$(UnityEditorPath)') and $([System.String]::Copy('$(UnityEditorPath)').EndsWith('.exe'))">$([System.IO.Path]::GetDirectoryName('$(UnityEditorPath)'))</UnityEditorPath>
+    <UnityEditorDataRoot Condition="'$(UnityEditorDataRoot)' == '' and '$(UnityEditorPath)' != ''">$(UnityEditorPath)/Data/Managed</UnityEditorDataRoot>
+    <_ObfUnityDriveEditors Condition="$([MSBuild]::IsOSPlatform('Windows'))">$([System.IO.Path]::GetPathRoot('$(MSBuildProjectDirectory)'))Program Files/Unity Editor</_ObfUnityDriveEditors>
+    <_ObfUnityHubEditors Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(ProgramFiles)/Unity/Hub/Editor</_ObfUnityHubEditors>
+    <_ObfUnityHubEditors Condition="$([MSBuild]::IsOSPlatform('OSX'))">/Applications/Unity/Hub/Editor</_ObfUnityHubEditors>
+    <_ObfUnityHubEditors Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(HOME)/Unity/Hub/Editor</_ObfUnityHubEditors>
+  </PropertyGroup>
+  <Target Name="ResolveObfUnityReferencePath" BeforeTargets="ValidateUnityReferencePath;ResolveAssemblyReferences">
+  <ItemGroup Condition="'$(UnityEditorDataRoot)' == ''">
+    <_ObfUnityPreferredCore Include="$(UnityEditorsRoot)/2022.3*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(UnityEditorsRoot)' != ''" />
+    <_ObfUnityPreferredCore Include="$(_ObfUnityHubEditors)/2022.3*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(_ObfUnityHubEditors)' != ''" />
+    <_ObfUnityPreferredCore Include="$(_ObfUnityDriveEditors)/2022.3*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(_ObfUnityDriveEditors)' != ''" />
+    <_ObfUnityOtherCore Include="$(UnityEditorsRoot)/2023.*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll;$(UnityEditorsRoot)/6*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(UnityEditorsRoot)' != ''" />
+    <_ObfUnityOtherCore Include="$(_ObfUnityHubEditors)/2023.*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll;$(_ObfUnityHubEditors)/6*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(_ObfUnityHubEditors)' != ''" />
+    <_ObfUnityOtherCore Include="$(_ObfUnityDriveEditors)/2023.*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll;$(_ObfUnityDriveEditors)/6*/Editor/Data/Managed/UnityEngine/UnityEngine.CoreModule.dll" Condition="'$(_ObfUnityDriveEditors)' != ''" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(UnityEditorDataRoot)' == ''">
+    <_ObfUnityCoreReference>@(_ObfUnityPreferredCore)</_ObfUnityCoreReference>
+    <_ObfUnityCoreReference Condition="'$(_ObfUnityCoreReference)' == ''">@(_ObfUnityOtherCore)</_ObfUnityCoreReference>
+    <_ObfUnityCoreReference Condition="'$(_ObfUnityCoreReference)' != ''">$(_ObfUnityCoreReference.Split(';').GetValue(0))</_ObfUnityCoreReference>
+    <UnityEditorDataRoot Condition="'$(_ObfUnityCoreReference)' != ''">$([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName('$(_ObfUnityCoreReference)'))))</UnityEditorDataRoot>
+  </PropertyGroup>
+    <ItemGroup>
+      <Reference>
+        <HintPath Condition="'%(Reference.Identity)' == 'UnityEngine'">$(UnityEditorDataRoot)/UnityEngine/UnityEngine.dll</HintPath>
+        <HintPath Condition="'%(Reference.Identity)' == 'UnityEngine.CoreModule'">$(UnityEditorDataRoot)/UnityEngine/UnityEngine.CoreModule.dll</HintPath>
+        <HintPath Condition="'%(Reference.Identity)' == 'UnityEngine.IMGUIModule'">$(UnityEditorDataRoot)/UnityEngine/UnityEngine.IMGUIModule.dll</HintPath>
+        <HintPath Condition="'%(Reference.Identity)' == 'UnityEngine.JSONSerializeModule'">$(UnityEditorDataRoot)/UnityEngine/UnityEngine.JSONSerializeModule.dll</HintPath>
+        <HintPath Condition="'%(Reference.Identity)' == 'UnityEditor'">$(UnityEditorDataRoot)/UnityEditor.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+  </Target>
+</Project>

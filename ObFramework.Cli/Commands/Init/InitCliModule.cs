@@ -11,7 +11,10 @@ namespace ObFramework.Cli.Commands.Init
         {
             var builder = new PipelineBuilder<InitContext>().Add(new SetupInitStep());
             if (engine == EngineKind.Unity)
+            {
+                builder.Add(new UnityPackagesInitStep());
                 builder.Add(new UnityEditorInitStep());
+            }
             builder.Add(new LubanInstallStep());
             return builder.Build();
         }
