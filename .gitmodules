@@ -1,0 +1,4 @@
+[submodule "ai"]
+	path = ai
+	url = https://github.com/OBSERVATER/ObFramework.Docs.git
+	branch = main
