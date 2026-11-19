@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 
 namespace ObFramework.Cli.Unity;
 
@@ -13,12 +14,39 @@ internal static class UnityProject
     {
         if (!Directory.Exists(Path.Combine(root, "Assets")) || !Directory.Exists(Path.Combine(root, "ProjectSettings")))
             throw new ArgumentException($"Not a Unity project: {root}");
-        var versionFile = Path.Combine(root, "ProjectSettings/ProjectVersion.txt");
-        if (!File.Exists(versionFile)) throw new InvalidOperationException("ProjectSettings/ProjectVersion.txt is missing.");
-        var version = File.ReadLines(versionFile).FirstOrDefault(x => x.StartsWith("m_EditorVersion: "))?.Split(' ').Last();
+        var version = EditorVersion(root);
         if (version == null || !Version.TryParse(string.Join('.', version.Split('.').Take(2)), out var parsed) ||
             parsed < new Version(2022, 3))
             throw new InvalidOperationException($"Unity {version ?? "unknown"} is unsupported; Unity 2022.3 or newer is required.");
+    }
+
+    internal static string? EditorVersion(string root)
+    {
+        const string key = "m_EditorVersion:";
+        var file = Path.Combine(root, "ProjectSettings/ProjectVersion.txt");
+        if (!File.Exists(file)) throw new InvalidOperationException("ProjectSettings/ProjectVersion.txt is missing.");
+        return File.ReadLines(file).FirstOrDefault(line => line.StartsWith(key, StringComparison.Ordinal))?
+            .Substring(key.Length).Trim();
+    }
+
+    internal static string? FrameworkVersion(string root)
+    {
+        var recorded = LoadObject(Path.Combine(root, "setup.json"))["modules"]?["installation"]?
+            ["frameworkVersion"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(recorded)) return recorded;
+
+        var packages = new NuGetLayout(root).Packages;
+        if (!File.Exists(packages)) return null;
+        var entries = XDocument.Load(packages).Root?.Elements("package");
+        if (entries == null) return null;
+        string? FindVersion(string id) => (string?)entries.SingleOrDefault(entry =>
+            string.Equals((string?)entry.Attribute("id"), id, StringComparison.OrdinalIgnoreCase))?.Attribute("version");
+        var runtime = FindVersion("ObFramework");
+        var adapter = FindVersion("ObFramework.Adapter.Unity");
+        if (runtime == null && adapter == null) return null;
+        if (runtime == null || !string.Equals(runtime, adapter, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Unity project packages differ. Repair them with ob init --package-version <VERSION>.");
+        return runtime;
     }
 
     public static void ValidateSdk(string root, CancellationToken ct)
@@ -85,14 +113,12 @@ internal static class UnityProject
         SaveObject(path, manifest);
     }
 
-    public static string ResourceChoice(string root, string? requested)
+    public static string ResourceChoice(string root)
     {
-        var choice = requested ?? LoadObject(Path.Combine(root, "setup.json"))["modules"]?["installation"]?["resources"]?.GetValue<string>() ?? "custom";
+        var installation = LoadObject(Path.Combine(root, "setup.json"))["modules"]?["installation"];
+        var choice = installation?["resources"]?.GetValue<string>() ?? "custom";
         if (choice is not ("custom" or "addressables"))
-            throw new ArgumentException("--resources must be custom or addressables.");
-        var installed = LoadObject(Path.Combine(root, "setup.json"))["modules"]?["installation"]?["resources"]?.GetValue<string>();
-        if (installed != null && choice != installed)
-            throw new InvalidOperationException($"Resource backend is already '{installed}'. Remove the previous integration and update modules.installation.resources explicitly before switching.");
+            throw new InvalidOperationException("Set modules.installation.resources in setup.json to 'custom' or 'addressables'.");
         return choice;
     }
 }

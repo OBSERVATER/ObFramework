@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using NuGet.Versioning;
 using ObFramework.Cli.Unity;
 using ObFramework.Cli.Commands.Config;
 using ObFramework.Cli.Deployment;
+using ObFramework.Cli.Commands.Update;
 using Spectre.Console.Cli;
 
 namespace ObFramework.Cli.Commands.Init
@@ -22,10 +24,6 @@ namespace ObFramework.Cli.Commands.Init
             [Description("Skip Luban installation; still update setup.json and engine tooling.")]
             public bool SkipDownload { get; set; }
 
-            [CommandOption("--resources <BACKEND>")]
-            [Description("custom (default) or addressables. Existing selection is preserved.")]
-            public string? Resources { get; set; }
-
             [CommandOption("--package-version <VERSION>")]
             public string? PackageVersion { get; set; }
 
@@ -43,15 +41,24 @@ namespace ObFramework.Cli.Commands.Init
             {
                 var root = SetupConfigPaths.ValidateAbsoluteRoot(Path.GetFullPath(settings.Root ?? Directory.GetCurrentDirectory()));
                 var engine = EngineProject.Resolve(settings.Engine, root);
-                if (engine != EngineKind.Unity && settings.Resources != null)
-                    throw new ArgumentException("--resources is only supported for Unity.");
+                Task<string?>? updateNotice = null;
                 if (engine == EngineKind.Unity)
                 {
+                    if (settings.PackageVersion == null)
+                    {
+                        updateNotice = UpdateCatalog.GetNoticeAsync(root);
+                        var currentVersion = UnityProject.FrameworkVersion(root);
+                        if (currentVersion != null && (!NuGetVersion.TryParse(currentVersion, out var installed) ||
+                            installed != UpdateCatalog.CliVersion))
+                            throw new InvalidOperationException(
+                                $"This project uses ObFramework {currentVersion}. Run ob update or use the matching CLI.");
+                    }
                     UnityProject.Validate(root);
                     UnityProject.RequireClosed(root);
+                    UnityTestScaffold.Validate(root);
                     if (!settings.SkipPackages) UnityProject.ValidateSdk(root, cancellationToken);
                 }
-                var resources = engine == EngineKind.Unity ? UnityProject.ResourceChoice(root, settings.Resources) : "custom";
+                var resources = engine == EngineKind.Unity ? UnityProject.ResourceChoice(root) : "custom";
                 var init = new InitContext(root, engine, settings.SkipDownload, cancellationToken)
                 {
                     Resources = resources,
@@ -69,6 +76,8 @@ namespace ObFramework.Cli.Commands.Init
                     Console.WriteLine("Init: Unity compilation/runtime not verified. Run ob doctor --unity --unity-editor <FILE>, then test your bootstrap scene.");
                     if (checks.Any(x => x.Status == "fail")) return 1;
                 }
+                if (updateNotice?.IsCompletedSuccessfully == true && updateNotice.Result is { } notice)
+                    Console.Error.WriteLine(notice);
                 Console.WriteLine($"Init: complete ({root}; engine: {engine}).");
                 return 0;
             }

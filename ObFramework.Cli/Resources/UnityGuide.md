@@ -19,11 +19,9 @@ resource plugin to `UnityUIAdapter`. Implement `AGameLauncher.CreateApplication(
 application; attach your concrete launcher to a scene object. Init installs tooling; it does not
 create a runnable game or modify scenes/prefabs.
 
-For the optional Addressables source integration, select it explicitly on initial installation:
-
-```powershell
-ob init --engine unity --resources addressables
-```
+For the optional Addressables source integration, set `modules.installation.resources` in
+`setup.json` to `addressables` and run `ob init`. You can add the setting before the first
+initialization or supply it in an existing setup file.
 
 This installs Addressables 1.21.21 if absent, preserves compatible 1.21.x selections, and deploys
 `Assets/ObFramework/Integrations/Addressables`. Unity compiles this source against the project's own
@@ -47,6 +45,9 @@ Keep `.obf/` out of source control (SDK restore cache, local tool installation a
 Commit Packages/manifest.json, NuGet.config, packages.config, setup.json, and owned deployment files
 according to your project's policy. setup.json contains a machine-specific absolute root: update it
 explicitly after moving/cloning the project; doctor detects stale roots.
+
+New projects get an engine-independent business assembly under `Assets/Scripts/Core/` and
+a starter test. Run `dotnet test Tests/Game.Core.Tests/Game.Core.Tests.csproj` from the root.
 
 ## Coding and generation rules
 

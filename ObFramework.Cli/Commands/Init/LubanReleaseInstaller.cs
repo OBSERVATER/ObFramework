@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text.Json;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 
@@ -8,7 +7,7 @@ namespace ObFramework.Cli.Commands.Init
     internal sealed class LubanReleaseInstaller : IDisposable
     {
         private const string Version = "v5.1.0";
-        private const string ReleaseApi = "https://api.github.com/repos/focus-creative-games/luban/releases/tags/" + Version;
+        private const string ReleaseDownload = "https://github.com/focus-creative-games/luban/releases/download/" + Version + "/";
         private const string Marker = ".obf-luban-version";
         private readonly HttpClient _http;
         private readonly bool _ownsHttp;
@@ -22,7 +21,6 @@ namespace ObFramework.Cli.Commands.Init
             _http = http;
             _ownsHttp = ownsHttp;
             _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ObFramework-CLI", "1.0"));
-            _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         }
 
         public void Install(string dll, string? agentDll, CancellationToken ct)
@@ -33,14 +31,11 @@ namespace ObFramework.Cli.Commands.Init
                 return;
             }
 
-            using var response = _http.Send(new HttpRequestMessage(HttpMethod.Get, ReleaseApi), ct);
-            response.EnsureSuccessStatusCode();
-            using var stream = response.Content.ReadAsStream(ct);
-            using var release = JsonDocument.Parse(stream);
-            var assets = release.RootElement.GetProperty("assets");
-            InstallPackage(assets, "Luban", dll, ct);
+            // This release and its asset names are pinned. Download the same official assets
+            // as the release page, without depending on the REST API's separate rate limit.
+            InstallPackage("Luban", dll, ct);
             if (agentDll != null)
-                InstallPackage(assets, "Luban.Agent", agentDll, ct);
+                InstallPackage("Luban.Agent", agentDll, ct);
         }
 
         private static bool IsCurrent(string dll)
@@ -50,31 +45,12 @@ namespace ObFramework.Cli.Commands.Init
                 File.ReadAllText(Path.Combine(folder, Marker)).Trim() == Version;
         }
 
-        private void InstallPackage(JsonElement assets, string package, string dll, CancellationToken ct)
+        private void InstallPackage(string package, string dll, CancellationToken ct)
         {
             if (IsCurrent(dll))
                 return;
 
-            string? url = null;
-            foreach (var asset in assets.EnumerateArray())
-            {
-                var name = asset.GetProperty("name").GetString() ?? "";
-                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                    !name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                var stem = Path.GetFileNameWithoutExtension(name);
-                if (!stem.Equals(package, StringComparison.OrdinalIgnoreCase) &&
-                    !stem.StartsWith(package + "-", StringComparison.OrdinalIgnoreCase) &&
-                    !stem.StartsWith(package + ".", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (package == "Luban" && (stem.StartsWith("Luban.Agent", StringComparison.OrdinalIgnoreCase) ||
-                    stem.StartsWith("Luban.Mcp", StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                url = asset.GetProperty("browser_download_url").GetString();
-                break;
-            }
-            if (url == null)
-                throw new InvalidOperationException($"No {package} .zip or .7z found in Luban {Version} release.");
+            var url = ReleaseDownload + package + ".7z";
 
             var target = Path.GetDirectoryName(dll)!;
             var marker = Path.Combine(target, Marker);
@@ -86,8 +62,9 @@ namespace ObFramework.Cli.Commands.Init
             Directory.CreateDirectory(temp);
             try
             {
-                var archivePath = Path.Combine(temp, "package" + Path.GetExtension(new Uri(url).AbsolutePath));
-                using (var response = _http.Send(new HttpRequestMessage(HttpMethod.Get, url),
+                var archivePath = Path.Combine(temp, "package.7z");
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using (var response = _http.Send(request,
                     HttpCompletionOption.ResponseHeadersRead, ct))
                 {
                     response.EnsureSuccessStatusCode();

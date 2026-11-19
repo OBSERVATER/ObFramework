@@ -1,0 +1,237 @@
+name: CI and release
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Managed tests and release packages
+    runs-on: ubuntu-24.04
+    outputs:
+      release-version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Read the release request
+        id: version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          trailer=$(git show -s --format='%(trailers:key=Release-As)' "$GITHUB_SHA")
+          [[ -n "$trailer" ]] || exit 0
+
+          version=${trailer#*: }
+          number='(0|[1-9][0-9]*)'
+          identifier="($number|[0-9]*[a-z-][0-9a-z-]*)"
+          semver="^$number\.$number\.$number(-$identifier(\.$identifier)*)?$"
+          if [[ ! "$version" =~ $semver ]]; then
+            echo "::error::Use exactly one Release-As trailer with a version such as 0.1.0 or 0.1.0-preview.3."
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Run managed tests
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          args=()
+          if [[ -n "$RELEASE_VERSION" ]]; then
+            args+=("-p:Version=$RELEASE_VERSION")
+          fi
+          dotnet test ObFramework.Test/ObFramework.Test.csproj --configuration Release "${args[@]}"
+
+      - name: Get Unity Editor references
+        if: steps.version.outputs.version != ''
+        shell: bash
+        run: |
+          # Unity 2022.3.58f1 is the 2022 LTS patch used to verify adapter packing locally.
+          archive="$RUNNER_TEMP/unity-editor.tar.xz"
+          unity_dir="$RUNNER_TEMP/unity"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://download.unity3d.com/download_unity/ed7f6eacb62e/LinuxEditorInstaller/Unity-2022.3.58f1.tar.xz \
+            --output "$archive"
+          mkdir -p "$unity_dir"
+          tar -xJf "$archive" -C "$unity_dir" Editor/Data/Managed/UnityEngine
+          rm "$archive"
+          managed="$unity_dir/Editor/Data/Managed"
+          test -s "$managed/UnityEngine/UnityEngine.dll"
+          test -s "$managed/UnityEngine/UnityEngine.CoreModule.dll"
+          printf 'UnityEditorDataRoot=%s\n' "$managed" >> "$GITHUB_ENV"
+
+      - name: Find the compatible NuGet baseline
+        id: baseline
+        if: steps.version.outputs.version != ''
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from urllib.error import HTTPError
+          from urllib.request import urlopen
+
+          target = os.environ["RELEASE_VERSION"]
+          if "-" in target:
+              raise SystemExit(0)
+
+          def read_json(url):
+              with urlopen(url, timeout=20) as response:
+                  return json.load(response)
+
+          index = read_json("https://api.nuget.org/v3/index.json")
+          base = next(resource["@id"] for resource in index["resources"]
+                      if resource["@type"] == "PackageBaseAddress/3.0.0")
+          try:
+              versions = read_json(base.rstrip("/") + "/obframework.cli/index.json")["versions"]
+          except HTTPError as error:
+              if error.code != 404:
+                  raise
+              versions = []
+
+          def parts(version):
+              return tuple(map(int, version.split(".")))
+
+          current = parts(target)
+          width = 2 if current[0] == 0 else 1
+          previous = [parts(version) for version in versions
+                      if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+                      and parts(version) < current
+                      and parts(version)[:width] == current[:width]]
+          if previous:
+              baseline = ".".join(map(str, max(previous)))
+              print(f"Validating public API against {baseline}")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                  print(f"version={baseline}", file=output)
+          PY
+
+      - name: Pack the release
+        if: steps.version.outputs.version != ''
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          BASELINE_VERSION: ${{ steps.baseline.outputs.version }}
+        run: |
+          validation=()
+          if [[ -n "$BASELINE_VERSION" ]]; then
+            validation+=("-p:EnablePackageValidation=true" "-p:PackageValidationBaselineVersion=$BASELINE_VERSION")
+          fi
+          dotnet pack Framework/ObFramework.csproj --configuration Release \
+            "-p:Version=$RELEASE_VERSION" --output "$RUNNER_TEMP/packages" "${validation[@]}"
+          dotnet pack ObFramework.Cli/ObFramework.Cli.csproj --configuration Release \
+            "-p:Version=$RELEASE_VERSION" --output "$RUNNER_TEMP/packages"
+          dotnet pack ObFramework.Adapter.Unity/ObFramework.Adapter.Unity.csproj --configuration Release \
+            "-p:Version=$RELEASE_VERSION" --output "$RUNNER_TEMP/packages" "${validation[@]}"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.version.outputs.version != ''
+        with:
+          name: release-packages
+          path: ${{ runner.temp }}/packages/*.nupkg
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    name: Publish GitHub Release
+    needs: test
+    if: github.event_name == 'push' && needs.test.outputs.release-version != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ needs.test.outputs.release-version }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages
+          path: ${{ runner.temp }}/packages
+
+      - name: Publish the packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.test.outputs.release-version }}
+        run: bash .github/scripts/publish-release.sh "$RUNNER_TEMP/packages"
+
+  publish-nuget:
+    name: Publish to NuGet.org
+    needs: [test, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      id-token: write
+    concurrency:
+      group: nuget-${{ needs.test.outputs.release-version }}
+      cancel-in-progress: false
+    env:
+      RELEASE_VERSION: ${{ needs.test.outputs.release-version }}
+      NUGET_SOURCE: https://api.nuget.org/v3/index.json
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages
+          path: ${{ runner.temp }}/packages
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Sign in to NuGet.org
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push the runtime and Unity adapter
+        working-directory: ${{ runner.temp }}/packages
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          for package in ObFramework ObFramework.Adapter.Unity; do
+            dotnet nuget push "$package.$RELEASE_VERSION.nupkg" \
+              --source "$NUGET_SOURCE" --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
+
+      - name: Wait until both packages can be restored
+        shell: bash
+        run: |
+          base_url=$(curl --fail --silent --show-error --retry 3 "$NUGET_SOURCE" |
+            jq -er 'first(.resources[] | select(."@type" == "PackageBaseAddress/3.0.0") | ."@id")')
+
+          for package in obframework obframework.adapter.unity; do
+            echo "Waiting for $package $RELEASE_VERSION on NuGet.org"
+            curl --fail --silent --show-error --max-time 15 --retry 90 --retry-all-errors \
+              --retry-delay 10 --retry-max-time 900 --output /dev/null \
+              "${base_url%/}/$package/$RELEASE_VERSION/$package.nuspec"
+          done
+
+      - name: Push the CLI
+        working-directory: ${{ runner.temp }}/packages
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push "ObFramework.Cli.$RELEASE_VERSION.nupkg" \
+            --source "$NUGET_SOURCE" --api-key "$NUGET_API_KEY" --skip-duplicate

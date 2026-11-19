@@ -16,6 +16,11 @@ namespace ObFramework.Integrated.Random
             _seed = source.Seed;
         }
         public int Seed => _seed;
+        /// <summary>Creates a fresh stream from an explicit seed and ordered numeric keys.
+        /// With no keys, starts directly at the supplied seed.</summary>
+        public static DeterministicRandomStream CreateStream(ulong seed, params ulong[] keys)
+            => new DeterministicRandomStream(seed, keys);
+
         public void Register(PluginRegistration registration)
         {
         }
@@ -80,7 +85,6 @@ namespace ObFramework.Integrated.Random
                 }
             }
 
-            // Value01 can be exactly one; use the final positive entry at that endpoint.
             return lastValidKey;
         }
     }

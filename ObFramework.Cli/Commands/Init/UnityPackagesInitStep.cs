@@ -18,6 +18,7 @@ internal sealed class UnityPackagesInitStep : IPipelineStep<InitContext>
         }
         UnityIntegrationInstaller.Install(context.Root, context.Resources);
         UnityIntegrationInstaller.InstallGuide(context.Root);
+        UnityTestScaffold.Install(context.Root, context.PackageVersion);
         UnityIntegrationInstaller.SaveSelection(context.Root, context.Resources, context.SkipPackages ? null : context.PackageVersion, context.SkipDownload);
         return StepResult.Continue;
     }

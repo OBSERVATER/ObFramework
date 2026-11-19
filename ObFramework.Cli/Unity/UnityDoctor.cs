@@ -97,7 +97,7 @@ internal static class UnityDoctor
         });
         Check("OBD060", () =>
         {
-            var choice = UnityProject.ResourceChoice(root, null);
+            var choice = UnityProject.ResourceChoice(root);
             if (choice != "addressables") return;
             var version = UnityProject.LoadObject(Path.Combine(root, "Packages/manifest.json"))["dependencies"]?[UnityProject.AddressablesId]?.GetValue<string>();
             Require(Version.TryParse(version, out var parsed) && parsed.Major == 1 && parsed.Minor == 21, "Addressables integration requires a supported 1.21.x package.");

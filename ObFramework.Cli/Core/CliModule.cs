@@ -1,5 +1,6 @@
 ﻿using ObFramework.Cli.Commands;
 using ObFramework.Cli.Commands.Reference;
+using ObFramework.Cli.Commands.Update;
 using Spectre.Console.Cli;
 
 namespace ObFramework.Cli.Core
@@ -45,6 +46,9 @@ namespace ObFramework.Cli.Core
 
                 config.AddCommand<ReferenceCommand>("reference")
                     .WithDescription("references among systems and models")
+                    .WithData(_session);
+                config.AddCommand<UpdateCommand>("update")
+                    .WithDescription("Check or update the CLI and Unity project to a matched release")
                     .WithData(_session);
                 config.AddCommand<DoctorCommand>("doctor")
                     .WithDescription("diagnostics if project initialized normally.")

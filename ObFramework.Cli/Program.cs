@@ -3,6 +3,7 @@ using System.Text;
 using ObFramework.Cli.Commands.Config;
 using ObFramework.Cli.Commands.Init;
 using ObFramework.Cli.Commands.Table;
+using ObFramework.Cli.Commands.Update;
 
 namespace ObFramework.Cli
 {
@@ -10,13 +11,16 @@ namespace ObFramework.Cli
     {
         private static async Task<int> Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == UpdateWorker.Argument)
+                return UpdateWorker.Run(args);
+
             var cli = new CliModule();
             cli.Initialize();
 
             ConfigCliModule.Register(cli);
             InitCliModule.Register(cli);
             TableCliModule.Register(cli);
-            ObFramework.Cli.Deployment.UnityDeployCliModule.Register(cli);
+            Deployment.UnityDeployCliModule.Register(cli);
 
             // 非交互模式：直接执行后退出
             if (args.Length > 0)
@@ -29,6 +33,7 @@ namespace ObFramework.Cli
         private static async Task<int> RunInteractiveAsync(CliModule cli)
         {
             Console.WriteLine("ObFramework CLI");
+            _ = ReportUpdateAsync(UpdateCatalog.GetNoticeAsync(Directory.GetCurrentDirectory()));
             Console.WriteLine($"It's {DateTime.Now:yyyy-MM-dd HH:mm:ss} now, type 'help' to get more information or 'exit' to exit");
             while (!cli.ExitRequested)
             {
@@ -57,6 +62,12 @@ namespace ObFramework.Cli
             }
 
             return 0;
+        }
+
+        private static async Task ReportUpdateAsync(Task<string?> check)
+        {
+            var notice = await check;
+            if (notice != null) await Console.Error.WriteLineAsync(notice);
         }
 
         private static string[] SplitArguments(string input)

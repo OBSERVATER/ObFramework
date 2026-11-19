@@ -17,12 +17,14 @@ ob doctor --root "D:/UnityProjects/MyGame" --json
 
 Init installs the matching runtime/Unity packages, NuGetForUnity, Editor tools and source generators.
 For local or private feeds use `--source <feed>` and optionally `--package-version <version>`.
+Run `ob update --check` from an initialized Unity project to find a matched CLI and framework update.
 The Unity quick-start is installed at Assets/ObFramework/README.md.
 
 The base Unity package has no Addressables or YooAsset dependency. Implement
 `IAssetAdapter<TNativeHandle>` (and `IRawFileAdapter<TNativeHandle>` for raw files), register through
 `ResourcePlugin.Create(adapter)`, and supply that plugin to the UI adapter. Opt into the supplied
-Addressables source integration with `ob init --resources addressables`; it compiles inside the
+Addressables source integration by setting `modules.installation.resources` to `addressables` in
+`setup.json` before running `ob init`. It compiles inside the
 user's Unity project against their selected compatible package.
 
 Compose your application through `PluginApplication` and a Unity `AGameLauncher`. Business Views
