@@ -1,6 +1,7 @@
-using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace ObFramework.Cli.Commands.Init
 {
@@ -9,10 +10,17 @@ namespace ObFramework.Cli.Commands.Init
         private const string Version = "v5.1.0";
         private const string ReleaseApi = "https://api.github.com/repos/focus-creative-games/luban/releases/tags/" + Version;
         private const string Marker = ".obf-luban-version";
-        private readonly HttpClient _http = new HttpClient();
+        private readonly HttpClient _http;
+        private readonly bool _ownsHttp;
 
-        public LubanReleaseInstaller()
+        public LubanReleaseInstaller() : this(new HttpClient(), true) { }
+
+        internal LubanReleaseInstaller(HttpClient http) : this(http, false) { }
+
+        private LubanReleaseInstaller(HttpClient http, bool ownsHttp)
         {
+            _http = http;
+            _ownsHttp = ownsHttp;
             _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ObFramework-CLI", "1.0"));
             _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         }
@@ -51,7 +59,8 @@ namespace ObFramework.Cli.Commands.Init
             foreach (var asset in assets.EnumerateArray())
             {
                 var name = asset.GetProperty("name").GetString() ?? "";
-                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                    !name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
                     continue;
                 var stem = Path.GetFileNameWithoutExtension(name);
                 if (!stem.Equals(package, StringComparison.OrdinalIgnoreCase) &&
@@ -65,7 +74,7 @@ namespace ObFramework.Cli.Commands.Init
                 break;
             }
             if (url == null)
-                throw new InvalidOperationException($"No {package} .zip found in Luban {Version} release.");
+                throw new InvalidOperationException($"No {package} .zip or .7z found in Luban {Version} release.");
 
             var target = Path.GetDirectoryName(dll)!;
             var marker = Path.Combine(target, Marker);
@@ -77,18 +86,21 @@ namespace ObFramework.Cli.Commands.Init
             Directory.CreateDirectory(temp);
             try
             {
-                var zip = Path.Combine(temp, "package.zip");
+                var archivePath = Path.Combine(temp, "package" + Path.GetExtension(new Uri(url).AbsolutePath));
                 using (var response = _http.Send(new HttpRequestMessage(HttpMethod.Get, url),
                     HttpCompletionOption.ResponseHeadersRead, ct))
                 {
                     response.EnsureSuccessStatusCode();
                     using var input = response.Content.ReadAsStream(ct);
-                    using var output = File.Create(zip);
+                    using var output = File.Create(archivePath);
                     input.CopyTo(output);
                 }
                 ct.ThrowIfCancellationRequested();
                 var extracted = Path.Combine(temp, "extracted");
-                ZipFile.ExtractToDirectory(zip, extracted);
+                Directory.CreateDirectory(extracted);
+                using (var archive = ArchiveFactory.OpenArchive(archivePath))
+                    foreach (var entry in archive.Entries.Where(x => !x.IsDirectory))
+                        entry.WriteToDirectory(extracted, new ExtractionOptions { ExtractFullPath = true, Overwrite = false });
                 var dlls = Directory.GetFiles(extracted, Path.GetFileName(dll), SearchOption.AllDirectories);
                 if (dlls.Length != 1)
                     throw new IOException($"Expected exactly one '{Path.GetFileName(dll)}' in {package} archive, found {dlls.Length}.");
@@ -120,6 +132,6 @@ namespace ObFramework.Cli.Commands.Init
             }
         }
 
-        public void Dispose() => _http.Dispose();
+        public void Dispose() { if (_ownsHttp) _http.Dispose(); }
     }
 }

@@ -52,6 +52,7 @@
 
     <ItemGroup>
       <PackageReference Include="Spectre.Console.Cli" Version="0.57.2" />
+      <PackageReference Include="SharpCompress" Version="0.50.9" />
     </ItemGroup>
 
     <ItemGroup>

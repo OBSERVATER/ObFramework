@@ -111,7 +111,7 @@ internal static class UnityDoctor
             foreach (var key in new[] { "lubanDll", "agentDll" })
             {
                 var path = luban?[key]?.GetValue<string>();
-                if (!string.IsNullOrWhiteSpace(path)) Require(File.Exists(Path.Combine(root, path)), $"Luban tool missing: {path}; run init without --skip-download.");
+                if (!string.IsNullOrWhiteSpace(path)) Require(File.Exists(Path.Combine(root, path)), $"Luban tool missing: {path}; retry ob init when network access is available.");
             }
         });
         if (File.Exists(setupPath))
@@ -121,7 +121,7 @@ internal static class UnityDoctor
                 if (UnityProject.LoadObject(setupPath)["modules"]?["installation"]?["skipLubanDownload"]?.GetValue<bool>() == true)
                 {
                     var index = checks.FindIndex(x => x.Id == "OBD070" && x.Status == "fail");
-                    if (index >= 0) checks[index] = checks[index] with { Status = "warning", Message = checks[index].Message + " (Luban was explicitly skipped.)" };
+                    if (index >= 0) checks[index] = checks[index] with { Status = "warning", Message = checks[index].Message + " (Luban download was skipped.)" };
                 }
             }
             catch (System.Text.Json.JsonException) { /* OBD010 already reports invalid configuration. */ }
