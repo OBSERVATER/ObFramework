@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
 
 namespace ObFramework.Cli.Deployment
@@ -55,11 +51,11 @@ namespace ObFramework.Cli.Deployment
         public string Description => $"{_assembly.GetName().Name}:{_resourcePrefix}/";
 
         public IReadOnlyList<string> ListFiles()
-            => _resourceNames.Value.Keys.OrderBy(static path => path, StringComparer.Ordinal).ToArray();
+            => [.. _resourceNames.Value.Keys.OrderBy(static path => path, StringComparer.Ordinal)];
 
         public bool TryRead(string relativePath, out byte[] content)
         {
-            content = Array.Empty<byte>();
+            content = [];
             if (string.IsNullOrWhiteSpace(relativePath))
                 return false;
 
@@ -100,10 +96,9 @@ namespace ObFramework.Cli.Deployment
 
         private static string NormalizePrefix(string resourcePrefix)
         {
-            if (string.IsNullOrWhiteSpace(resourcePrefix))
-                throw new ArgumentException("Resource prefix must not be empty.", nameof(resourcePrefix));
-
-            return resourcePrefix.Trim().Trim('/').Replace('\\', '/');
+            return string.IsNullOrWhiteSpace(resourcePrefix) 
+                ? throw new ArgumentException("Resource prefix must not be empty.", nameof(resourcePrefix)) : 
+                resourcePrefix.Trim().Trim('/').Replace('\\', '/');
         }
     }
 
@@ -128,15 +123,17 @@ namespace ObFramework.Cli.Deployment
         public string Description => RootDirectory;
 
         public IReadOnlyList<string> ListFiles()
-            => Directory
-                .EnumerateFiles(RootDirectory, "*", SearchOption.AllDirectories)
-                .Select(file => Path.GetRelativePath(RootDirectory, file).Replace('\\', '/'))
-                .OrderBy(static file => file, StringComparer.Ordinal)
-                .ToArray();
+            =>
+            [
+                .. Directory
+                    .EnumerateFiles(RootDirectory, "*", SearchOption.AllDirectories)
+                    .Select(file => Path.GetRelativePath(RootDirectory, file).Replace('\\', '/'))
+                    .OrderBy(static file => file, StringComparer.Ordinal)
+            ];
 
         public bool TryRead(string relativePath, out byte[] content)
         {
-            content = Array.Empty<byte>();
+            content = [];
             if (string.IsNullOrWhiteSpace(relativePath))
                 return false;
 

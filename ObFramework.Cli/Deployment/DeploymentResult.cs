@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace ObFramework.Cli.Deployment
 {
     /// <summary>Kind of change applied to one deployed file.</summary>

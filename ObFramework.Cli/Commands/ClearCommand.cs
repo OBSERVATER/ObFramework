@@ -1,5 +1,4 @@
-﻿using ObFramework.Core;
-using Spectre.Console.Cli;
+﻿using Spectre.Console.Cli;
 
 namespace ObFramework.Cli.Commands
 {

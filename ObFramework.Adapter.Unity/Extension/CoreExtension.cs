@@ -1,5 +1,4 @@
 ﻿using System;
-using MessagePipe;
 using UnityEngine;
 
 namespace ObFramework.Adapter.Unity.Extension

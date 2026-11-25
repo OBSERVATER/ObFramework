@@ -1,17 +1,8 @@
-using System;
 using System.ComponentModel;
-using ObFramework.Core;
 using UnityEngine;
 
 namespace ObFramework.Adapter.Unity.ViewBinding
 {
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public interface IGeneratedViewBinding
-    {
-        Type ControllerType { get; }
-        object CreateView(IArchitecture architecture);
-    }
-
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static class GeneratedViewBinding
     {

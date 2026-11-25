@@ -2,7 +2,6 @@ using MessagePack;
 using ObFramework.Core;
 using ObFramework.Integrated.Save;
 using ObFramework.Integrated.Diagnostics;
-using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 

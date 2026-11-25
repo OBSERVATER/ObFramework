@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 
-namespace ObFramework.Adapter.Unity.ViewBinding
+namespace ObFramework.Integrated.ViewBinding
 {
     [AttributeUsage(AttributeTargets.Class, Inherited = false)]
     public sealed class BindViewAttribute : Attribute

@@ -1,0 +1,20 @@
+{
+  "registryNamespace": "Game.Generated.UI",
+  "windows": [
+    {
+      "namespace": "Game.UI",
+      "view": "ShopView",
+      "window": "ShopWindow",
+      "contract": "Game.UI.IShopView",
+      "architecture": "Game.GameArchitecture",
+      "level": "Common",
+      "scene": "res://UI/Shop.tscn",
+      "generateWindow": true,
+      "bindings": [
+        { "control": "Label", "field": "_gold", "member": "Gold" },
+        { "control": "Button", "field": "_buy", "member": "BuyCommand", "command": true },
+        { "control": "LineEdit", "field": "_name", "member": "PlayerName", "twoWay": true }
+      ]
+    }
+  ]
+}

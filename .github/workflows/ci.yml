@@ -55,24 +55,6 @@ jobs:
           fi
           dotnet test ObFramework.Test/ObFramework.Test.csproj --configuration Release "${args[@]}"
 
-      - name: Get Unity Editor references
-        if: steps.version.outputs.version != ''
-        shell: bash
-        run: |
-          # Unity 2022.3.58f1 is the 2022 LTS patch used to verify adapter packing locally.
-          archive="$RUNNER_TEMP/unity-editor.tar.xz"
-          unity_dir="$RUNNER_TEMP/unity"
-          curl --fail --location --retry 3 --silent --show-error \
-            https://download.unity3d.com/download_unity/ed7f6eacb62e/LinuxEditorInstaller/Unity-2022.3.58f1.tar.xz \
-            --output "$archive"
-          mkdir -p "$unity_dir"
-          tar -xJf "$archive" -C "$unity_dir" Editor/Data/Managed/UnityEngine
-          rm "$archive"
-          managed="$unity_dir/Editor/Data/Managed"
-          test -s "$managed/UnityEngine/UnityEngine.dll"
-          test -s "$managed/UnityEngine/UnityEngine.CoreModule.dll"
-          printf 'UnityEditorDataRoot=%s\n' "$managed" >> "$GITHUB_ENV"
-
       - name: Find the compatible NuGet baseline
         id: baseline
         if: steps.version.outputs.version != ''

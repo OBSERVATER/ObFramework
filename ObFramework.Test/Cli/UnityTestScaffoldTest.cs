@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using ObFramework.Cli.Unity;
-using NUnit.Framework;
 
 namespace ObFramework.Test.Cli;
 

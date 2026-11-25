@@ -1,5 +1,4 @@
 using System.Reflection;
-using Microsoft.CodeAnalysis;
 
 namespace ObFramework.Test.Generator;
 

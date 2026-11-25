@@ -13,10 +13,9 @@ namespace ObFramework.Adapter.Unity.Core
 
         protected abstract PluginApplication CreateApplication();
         protected virtual string? UIRootResourceKey => null;
-        protected virtual Task StartGameAsync(CancellationToken cancellationToken) => StartGameAsync();
+        public abstract Task StartGameAsync(CancellationToken cancellationToken = default);
 
         public override IArchitecture GetArchitecture() => _runtime!.Application!.Architecture;
-        public abstract Task StartGameAsync();
 
         private void Awake()
         {

@@ -1,5 +1,3 @@
-using System;
-
 namespace ObFramework.Cli.Deployment
 {
     /// <summary>
