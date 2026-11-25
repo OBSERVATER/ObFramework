@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Adapter.Unity.UI;
 using ObFramework.Adapter.Unity.ViewBinding;
@@ -16,10 +17,12 @@ namespace ObFramework.Adapter.Unity.Core
         private Scene _bootstrap;
         private HashSet<GameObject>? _persistentRoots;
         private bool _fallback;
+        private bool _usesPrefabUIRoot;
         private bool _quitRequested;
 
         public static UnityRuntimeHost? Current { get; private set; }
         public PluginApplication? Application { get; private set; }
+        public UIRoot? RuntimeUIRoot { get; private set; }
         internal bool IsStopping { get; private set; }
 
         internal static UnityRuntimeHost Reserve(GameObject launcher, GameObject? manager)
@@ -49,7 +52,33 @@ namespace ObFramework.Adapter.Unity.Core
             return host;
         }
 
-        internal async Task StartAsync(PluginApplication application, UnityFrameLoopBridge driver)
+        internal void LoadUIRoot(string resourceKey)
+        {
+            _usesPrefabUIRoot = true;
+            var prefab = Resources.Load<GameObject>(resourceKey);
+            if (!prefab)
+                throw new InvalidOperationException($"Missing UI root prefab at Resources key '{resourceKey}'.");
+
+            if (_fallback)
+                gameObject.name = "GameManager";
+            _persistentRoots = new HashSet<GameObject> { gameObject };
+            DontDestroyOnLoad(gameObject);
+
+            // Screen Space - Overlay needs a top-level Canvas. The host owns both DDOL roots.
+            var root = Instantiate(prefab);
+            _persistentRoots.Add(root);
+            root.name = prefab.name;
+            DontDestroyOnLoad(root);
+            var ui = root.GetComponent<UIRoot>() ?? root.AddComponent<UIRoot>();
+            ui.Init();
+            if (!ui.SceneRoot || !ui.CommonRoot || !ui.PopupRoot)
+                throw new InvalidOperationException(
+                    $"UI root prefab '{resourceKey}' must have direct children named Scene, Common, and Popup.");
+            RuntimeUIRoot = ui;
+        }
+
+        internal async Task StartAsync(PluginApplication application, UnityFrameLoopBridge driver,
+            Func<CancellationToken, Task>? startGame)
         {
             if (!ReferenceEquals(Current, this))
             {
@@ -58,8 +87,8 @@ namespace ObFramework.Adapter.Unity.Core
             }
 
             Application = application;
-            await application.StartAsync(driver);
-            if (ReferenceEquals(Current, this) && UnityViewBindings.Current is { IsReady: true } views)
+            await application.StartAsync(driver, startGame, RequestExit);
+            if (!_usesPrefabUIRoot && ReferenceEquals(Current, this) && UnityViewBindings.Current is { IsReady: true } views)
             {
                 foreach (var ui in BootstrapUIRoots())
                 {
@@ -74,7 +103,7 @@ namespace ObFramework.Adapter.Unity.Core
 
         internal void Prepare(IEnumerable<GameObject> selectedRoots, UnityViewBindings views)
         {
-            var roots = new HashSet<GameObject> { gameObject };
+            var roots = _persistentRoots ?? new HashSet<GameObject> { gameObject };
             foreach (var root in selectedRoots)
             {
                 ValidateRoot(_bootstrap, root);
@@ -94,7 +123,8 @@ namespace ObFramework.Adapter.Unity.Core
             {
                 DontDestroyOnLoad(root);
                 foreach (var ui in root.GetComponentsInChildren<UIRoot>(true))
-                    ui.Init();
+                    if (ui != RuntimeUIRoot)
+                        ui.Init();
             }
 
             views.ScanRoots(initialRoots);
@@ -102,6 +132,8 @@ namespace ObFramework.Adapter.Unity.Core
 
         private IEnumerable<UIRoot> BootstrapUIRoots()
         {
+            if (_usesPrefabUIRoot)
+                yield break;
             // An active UIRoot can move itself to DDOL during Awake, before the launcher starts.
             foreach (var ui in FindObjectsOfType<UIRoot>(true))
                 if (ui.transform.parent == null && (ui.gameObject.scene == _bootstrap || ui.OriginalScene == _bootstrap))
@@ -151,16 +183,21 @@ namespace ObFramework.Adapter.Unity.Core
 
         private bool WantsToQuit()
         {
-            if (!_quitRequested)
-            {
-                _quitRequested = true;
-                _ = QuitAsync();
-            }
+            RequestExit();
             return false;
+        }
+
+        private void RequestExit()
+        {
+            if (_quitRequested || !ReferenceEquals(Current, this))
+                return;
+            _quitRequested = true;
+            _ = QuitAsync();
         }
 
         private async Task QuitAsync()
         {
+            await Task.Yield();
             await StopAndObserveAsync();
             await Task.Yield();
             UnityApplication.Quit();

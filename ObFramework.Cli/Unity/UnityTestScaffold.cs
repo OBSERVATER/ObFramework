@@ -75,6 +75,13 @@ internal static partial class UnityTestScaffold
         Console.WriteLine($"Init: .NET tests for '{SourceDirectory}' ready. Run dotnet test {TestProject}");
     }
 
+    internal static bool HasDefaultApplication(string root)
+    {
+        var path = Path.Combine(root, SourceDirectory, "GameApplication.cs");
+        return File.Exists(path) &&
+            File.ReadAllText(path).ReplaceLineEndings("\n").TrimEnd() == Application.ReplaceLineEndings("\n");
+    }
+
     private static void ValidateSettings(string path)
     {
         var settings = XElement.Load(path).Elements("PropertyGroup")

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Core.Async;
@@ -19,6 +20,7 @@ namespace ObFramework.Core
         private Task? _stopTask;
         private Task<List<Exception>>? _shutdown;
         private Task? _cleanupTask;
+        private Action? _requestPlatformExit;
         private bool _binding;
         private bool _stopping;
         public IArchitecture Architecture => _architecture ?? throw new InvalidOperationException("Application is not initialized.");
@@ -29,17 +31,21 @@ namespace ObFramework.Core
         protected virtual Task StopGameAsync() => Task.CompletedTask;
         protected virtual void ReleaseAdapters() { }
 
-        public Task StartAsync(IFrameLoopDriver? driver = null)
+        public Task StartAsync(IFrameLoopDriver? driver = null) => StartAsync(driver, null, null);
+
+        internal Task StartAsync(IFrameLoopDriver? driver, Func<CancellationToken, Task>? startGame,
+            Action? requestPlatformExit)
         {
             if (_startTask != null || _stopping)
                 throw new InvalidOperationException("Application can only be started once.");
             var completion = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
             _startTask = completion.Task.Unwrap();
-            completion.SetResult(StartCoreAsync(driver));
+            _requestPlatformExit = requestPlatformExit;
+            completion.SetResult(StartCoreAsync(driver, startGame));
             return _startTask;
         }
 
-        private async Task StartCoreAsync(IFrameLoopDriver? driver)
+        private async Task StartCoreAsync(IFrameLoopDriver? driver, Func<CancellationToken, Task>? startGame)
         {
             try
             {
@@ -64,6 +70,9 @@ namespace ObFramework.Core
                 ThrowIfStopping();
                 await EnterGameAsync(_startup.Token);
                 ThrowIfStopping();
+                if (startGame != null)
+                    await startGame(_startup.Token);
+                ThrowIfStopping();
             }
             catch (Exception error)
             {
@@ -85,6 +94,23 @@ namespace ObFramework.Core
             if (_architecture == null || _stopping)
                 throw new InvalidOperationException("Application is not running.");
             return _work.Run(work);
+        }
+
+        /// <summary>Requests an orderly exit without waiting for application work to drain.</summary>
+        public void RequestExit()
+        {
+            if (_stopping)
+                return;
+            if (_requestPlatformExit is { } request)
+                request();
+            else
+                _ = StopAndObserveAsync();
+        }
+
+        private async Task StopAndObserveAsync()
+        {
+            try { await StopAsync(); }
+            catch (Exception error) { Trace.TraceError(error.ToString()); }
         }
 
         public Task StopAsync()
@@ -143,6 +169,7 @@ namespace ObFramework.Core
 
         private async Task CleanupCoreAsync()
         {
+            _requestPlatformExit = null;
             var errors = await RequestShutdown();
             try { await _work.StopAsync(); }
             catch (Exception error) { errors.Add(error); }

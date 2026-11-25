@@ -1,0 +1,30 @@
+using System.Threading.Tasks;
+using ObFramework.Adapter.Unity.Core;
+using ObFramework.Core;
+using ObFramework.Integrated.Clock;
+
+namespace Game.Bootstrap
+{
+    public sealed class GameLauncher : AGameLauncher
+    {
+        protected override string UIRootResourceKey => "ObFramework/UIRoot";
+
+        protected override PluginApplication CreateApplication() => new GameApplication(ConfigurePlugins());
+
+        private IPlugin[] ConfigurePlugins()
+        {
+            // Create and configure the game's Unity plugins here.
+            // Access the initialized UI root through UnityRuntimeHost.Current.RuntimeUIRoot.
+            return new IPlugin[]
+            {
+                new ClockPlugin(1f / 30f)
+            };
+        }
+
+        public override Task StartGameAsync()
+        {
+            // Open the initial window or load the first gameplay scene here.
+            return Task.CompletedTask;
+        }
+    }
+}

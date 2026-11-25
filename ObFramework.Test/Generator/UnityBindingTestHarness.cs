@@ -260,10 +260,10 @@ internal static class UnityBindingTestHarness
                 public static void SendAsync(UnityEngine.MonoBehaviour context, AUIView view, AAsyncCommand command)
                 {
                     AsyncSent++;
-                    RunAsync(context, view, command);
+                    _ = RunAsync(context, view, command);
                 }
 
-                private static async void RunAsync(UnityEngine.MonoBehaviour context, AUIView view, AAsyncCommand command)
+                private static async System.Threading.Tasks.Task RunAsync(UnityEngine.MonoBehaviour context, AUIView view, AAsyncCommand command)
                 {
                     try { await view.GetArchitecture().SendCommandAsync(command); }
                     catch (Exception error) { Report(context, error); }

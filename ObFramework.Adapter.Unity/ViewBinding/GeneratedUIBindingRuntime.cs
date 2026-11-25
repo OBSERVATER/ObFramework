@@ -32,9 +32,8 @@ namespace ObFramework.Adapter.Unity.ViewBinding
         }
 
         /// <summary>
-        /// Dispatches an asynchronous command at the engine event boundary. The returned ValueTask is
-        /// intentionally observed by the generated handler as a fire-and-forget operation; failures
-        /// are reported by <see cref="Report"/> and Running state is restored by the command runtime.
+        /// Dispatches an asynchronous command at the engine event boundary. This boundary reports
+        /// failures through <see cref="Report"/>. The command runtime restores Running state.
         /// </summary>
         public static void SendAsync(MonoBehaviour context, AUIView view, AAsyncCommand command)
         {
@@ -43,10 +42,10 @@ namespace ObFramework.Adapter.Unity.ViewBinding
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
 
-            ExecuteAsync(context, view, command);
+            _ = ExecuteAsync(context, view, command);
         }
 
-        private static async void ExecuteAsync(MonoBehaviour context, AUIView view, AAsyncCommand command)
+        private static async Task ExecuteAsync(MonoBehaviour context, AUIView view, AAsyncCommand command)
         {
             try
             {

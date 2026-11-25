@@ -12,12 +12,27 @@ ob doctor --unity --unity-editor "D:/Unity/Editor/Unity.exe"
 
 New NuGetForUnity installations use its OpenUPM scoped registry; existing package selections and other registry scopes are preserved.
 
+## Start the game
+
+Attach the generated `Assets/Scripts/Unity/GameLauncher.cs` to a GameObject in your startup scene.
+In Play mode, the launcher loads `Assets/ObFramework/Resources/ObFramework/UIRoot.prefab` and starts
+the shared `GameApplication` with a default clock and Unity view bindings. The runtime host keeps
+`GameManager` and the UI canvas alive when the startup scene unloads. The prefab provides the
+`Scene`, `Common`, and `Popup` layers. Add your own EventSystem and input module for interactive UI.
+
+The generated launcher's `ConfigurePlugins()` creates the default `ClockPlugin` and any additional
+Unity plugins you configure. `CreateApplication()` passes the complete plugin list to the game's
+`GameApplication` constructor. `RuntimeUIRoot` is initialized by this point.
+Use `StartGameAsync` for Unity startup work such as opening the first window. An exit button can
+call `RequestExit()` on the running `GameApplication`. Put application cleanup in `StopGameAsync()`.
+
 The default resource backend is `custom`. No Addressables or YooAsset package is required by the
 base framework. Implement `IAssetAdapter<TNativeHandle>` and, if raw-file loading is needed,
 `IRawFileAdapter<TNativeHandle>`. Pass the adapter to `ResourcePlugin.Create(adapter)` and pass that
-resource plugin to `UnityUIAdapter`. Implement `AGameLauncher.CreateApplication()` to compose your
-application; attach your concrete launcher to a scene object. Init installs tooling; it does not
-create a runnable game or modify scenes/prefabs.
+resource plugin to `UnityUIAdapter`. The launcher and prefab belong to the game project after creation.
+
+When adding the starter to an existing `GameApplication`, integrate the supplied `GameLauncher.cs.txt`
+with the game's application constructor and plugin configuration, then save the launcher as `.cs`.
 
 For the optional Addressables source integration, set `modules.installation.resources` in
 `setup.json` to `addressables` and run `ob init`. You can add the setting before the first

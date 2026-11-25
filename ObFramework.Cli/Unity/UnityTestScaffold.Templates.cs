@@ -58,7 +58,16 @@ internal static partial class UnityTestScaffold
         {
             public sealed class GameApplication : PluginApplication
             {
-                protected override IPlugin[] CreatePlugins() => Array.Empty<IPlugin>();
+                private readonly IPlugin[] _plugins;
+
+                public GameApplication() : this(Array.Empty<IPlugin>()) { }
+
+                public GameApplication(IPlugin[] plugins)
+                {
+                    _plugins = plugins ?? throw new ArgumentNullException(nameof(plugins));
+                }
+
+                protected override IPlugin[] CreatePlugins() => _plugins;
 
                 protected override IArchitecture CreateArchitecture(IPluginContext plugins)
                 {

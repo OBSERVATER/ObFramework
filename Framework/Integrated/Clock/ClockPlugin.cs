@@ -9,6 +9,7 @@ namespace ObFramework.Integrated.Clock
     public class ClockPlugin : IPlugin
     {
         public int Tick { get; private set; }
+        public double Time => Tick * (double)TickInterval + _accumulator;
         public float TickInterval { get; }
         private double _accumulator;
         private readonly FrameDispatcher _dispatcher;

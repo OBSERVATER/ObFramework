@@ -63,6 +63,46 @@ public class UnityTestScaffoldTest
         Assert.That(File.ReadAllText(unrelatedDefinition), Is.EqualTo(definition));
     }
 
+    [Test]
+    public void BootstrapInstallsEditableLauncherAndPrefabWithStableMetadata()
+    {
+        Install("1.0.0");
+        UnityBootstrapInstaller.Install(_root);
+        var launcher = At(UnityBootstrapInstaller.LauncherFile);
+        var prefab = At(UnityBootstrapInstaller.PrefabFile);
+        var meta = prefab + ".meta";
+        var launcherSource = File.ReadAllText(launcher);
+        Assert.That(launcherSource, Does.Contain("new GameApplication(ConfigurePlugins())"));
+        Assert.That(launcherSource, Does.Contain("IPlugin[] ConfigurePlugins()"));
+        Assert.That(launcherSource, Does.Contain("new ClockPlugin(1f / 30f)"));
+        Assert.That(File.ReadAllText(prefab), Does.Contain("m_Name: Popup"));
+        Assert.That(File.ReadAllText(prefab), Does.Not.Contain("m_ActionsAsset"));
+        Assert.That(File.ReadAllText(meta), Does.Contain("guid:"));
+
+        foreach (var path in new[] { launcher, prefab, meta })
+            File.AppendAllText(path, "\n# Project edit");
+        UnityBootstrapInstaller.Install(_root);
+        foreach (var path in new[] { launcher, prefab, meta })
+            Assert.That(File.ReadAllText(path), Does.EndWith("# Project edit"));
+    }
+
+    [Test]
+    public void BootstrapPreservesAnExistingApplicationAndOffersAnEditableLauncherTemplate()
+    {
+        Install("1.0.0");
+        var application = At("Assets/Scripts/Core/GameApplication.cs");
+        const string existingSource = "// Existing application source";
+        File.WriteAllText(application, existingSource);
+
+        Install("1.0.0");
+        UnityBootstrapInstaller.Install(_root);
+
+        Assert.That(File.ReadAllText(application), Is.EqualTo(existingSource));
+        Assert.That(File.Exists(At(UnityBootstrapInstaller.LauncherFile)), Is.False);
+        Assert.That(File.Exists(At(UnityBootstrapInstaller.LauncherFile + ".txt")), Is.True);
+        Assert.That(File.Exists(At(UnityBootstrapInstaller.PrefabFile)), Is.True);
+    }
+
     private void Install(string version)
     {
         UnityTestScaffold.Validate(_root);

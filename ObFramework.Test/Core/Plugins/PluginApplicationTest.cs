@@ -83,6 +83,50 @@ public class PluginApplicationTest
     }
 
     [Test]
+    public async Task HostedStartupUsesApplicationPluginsAndOneExitFlow()
+    {
+        var application = new Application();
+        var events = application.Plugin.Events;
+        Task? stop = null;
+        await application.StartAsync(new ApplicationDriver(events),
+            ct =>
+            {
+                Assert.That(ct.CanBeCanceled, Is.True);
+                Assert.That(application.Architecture.GetPlugin<ClockPlugin>().TickInterval, Is.EqualTo(0.02f));
+                events.Add("host-enter");
+                return Task.CompletedTask;
+            },
+            () => stop = application.StopAsync());
+
+        application.RequestExit();
+        application.RequestExit();
+        Assert.That(stop, Is.Not.Null);
+        await stop!;
+
+        Assert.That(events, Is.EqualTo(new[]
+        {
+            "driver-startup", "plugin-start", "architecture-start", "driver-prepare", "driver-bind", "enter", "host-enter",
+            "driver-unbind", "driver-release", "business-stop", "architecture-stop", "plugin-stop", "adapter-release"
+        }));
+    }
+
+    [Test]
+    public async Task ExitRequestDuringStartupCanReturnBeforeShutdownCompletes()
+    {
+        var application = new Application();
+        var start = application.StartAsync(null, ct =>
+        {
+            application.RequestExit();
+            Assert.That(ct.IsCancellationRequested, Is.True);
+            return Task.CompletedTask;
+        }, null);
+
+        await Assert.CatchAsync<OperationCanceledException>(async () => await start);
+        await application.StopAsync();
+        Assert.That(application.Plugin.Events, Does.Contain("business-stop"));
+    }
+
+    [Test]
     public async Task DriverPreparesBeforeEntryAndReleasesBeforeDependenciesWithReentrantStop()
     {
         var application = new Application();
