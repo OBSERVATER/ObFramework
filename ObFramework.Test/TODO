@@ -2,4 +2,5 @@
 2. 禁止直接调用Command和Query的Execute和Q方法，禁止直接调用GetArchitecture。也就是说一切要走扩展方法
 3. unity，godot禁止出现引擎原生（比如monobehaviour，node等，要使用VC）
 4. gamelauncher只负责启动加载，不要往里面堆业务逻辑
-5. 不要在view上面写业务
+5. 不要在view上面写业务,用command转发
+6. getsystem和getmodel使用接口而不是继承类

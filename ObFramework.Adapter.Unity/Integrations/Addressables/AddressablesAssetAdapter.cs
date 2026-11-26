@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ObFramework.Integrated.Resource;
@@ -20,9 +21,7 @@ namespace ObFramework.Adapter.Unity.Resource
             if (!typeof(UnityEngine.Object).IsAssignableFrom(typeof(T)))
                 throw new NotSupportedException($"Unsupported Unity asset type: {typeof(T)}");
 
-            ct.ThrowIfCancellationRequested();
-
-            var handle = Addressables.LoadAssetAsync<T>(request.Location);
+            var handle = await StartLoadAsync<T>(request.Location, ct);
             bool transferred = false;
 
             try
@@ -44,9 +43,30 @@ namespace ObFramework.Adapter.Unity.Resource
             }
         }
 
+        private static async Task<AsyncOperationHandle<T>> StartLoadAsync<T>(string key, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            var lookup = Addressables.LoadResourceLocationsAsync(key, typeof(T));
+            try
+            {
+                var locations = await lookup.Task;
+                ct.ThrowIfCancellationRequested();
+                if (lookup.Status != AsyncOperationStatus.Succeeded || locations == null)
+                    throw new InvalidOperationException($"Could not resolve resource: {key}", lookup.OperationException);
+                if (locations.Count == 0)
+                    throw new KeyNotFoundException($"No {typeof(T).Name} at Addressables key '{key}'.");
+
+                return Addressables.LoadAssetAsync<T>(locations[0]);
+            }
+            finally
+            {
+                Addressables.Release(lookup);
+            }
+        }
+
         public async Task<AssetLoadResult<byte[], AsyncOperationHandle>> ReadRawFileAsync(string location)
         {
-            var handle = Addressables.LoadAssetAsync<TextAsset>(location);
+            var handle = await StartLoadAsync<TextAsset>(location, CancellationToken.None);
 
             try
             {

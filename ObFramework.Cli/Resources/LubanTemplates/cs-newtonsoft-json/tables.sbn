@@ -88,6 +88,26 @@ public partial class {{bean.name}} : global::ObFramework.Integrated.Config.IConf
 
 namespace Luban
 {
+    internal static class StringUtil
+    {
+        public static string CollectionToString<T>(global::System.Collections.Generic.IEnumerable<T> collection)
+        {
+            if (collection == null)
+                return "null";
+
+            var builder = new global::System.Text.StringBuilder("[");
+            var first = true;
+            foreach (var item in collection)
+            {
+                if (!first)
+                    builder.Append(',');
+                builder.Append(item is null ? "null" : item.ToString());
+                first = false;
+            }
+            return builder.Append(']').ToString();
+        }
+    }
+
     public interface ITypeId
     {
         int GetTypeId();
