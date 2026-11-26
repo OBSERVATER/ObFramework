@@ -26,7 +26,11 @@ namespace ObFramework.Integrated.GAS.Attributes
         Subtract = 5,
 
         /// <summary>Pop two values and push their quotient.</summary>
-        Divide = 6
+        Divide = 6,
+        Min = 7,
+        Max = 8,
+        Clamp = 9,
+        Negate = 10
     }
 
     public interface IFormula<T> where T : struct

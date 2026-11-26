@@ -1,17 +1,18 @@
-﻿using System;
-using System.Runtime.CompilerServices;
+using System;
 
 namespace ObFramework.Integrated.GAS.Attributes.Core
 {
     public readonly struct FormulaFloat : IFormula<float>
     {
-        private readonly byte[] _bytecode;
+        private readonly Instruction[] _instructions;
+        private readonly float[] _constants;
         private readonly int _maxStackDepth;
 
-        internal FormulaFloat(byte[] bytecode, int slotCount, int maxStackDepth)
+        internal FormulaFloat(Instruction[] instructions, float[] constants, int slotCount, int maxStackDepth)
         {
-            _bytecode      = bytecode;
-            SlotCount      = slotCount;
+            _instructions = instructions;
+            _constants = constants;
+            SlotCount = slotCount;
             _maxStackDepth = maxStackDepth;
         }
 
@@ -19,88 +20,66 @@ namespace ObFramework.Integrated.GAS.Attributes.Core
 
         public float Calculate(float baseValue, ReadOnlySpan<float> slots)
         {
-            if (_bytecode == null || _bytecode.Length == 0)
+            if (_instructions == null || _instructions.Length == 0)
                 return baseValue;
 
-            Span<float> stack    = stackalloc float[_maxStackDepth];
-            var         stackPtr = 0;
-
-            ReadOnlySpan<byte> code = _bytecode;
-            var                pc   = 0;
-
-            while (pc < code.Length)
+            Span<float> stack = stackalloc float[_maxStackDepth];
+            int depth = 0;
+            foreach (var instruction in _instructions)
             {
-                var opCode = (OpCode)code[pc++];
-
-                switch (opCode)
+                switch (instruction.Code)
                 {
                     case OpCode.LoadBase:
-                        stack[stackPtr++] = baseValue;
+                        stack[depth++] = baseValue;
                         break;
-
                     case OpCode.LoadSlot:
-                    {
-                        var slotIndex = ReadInt32(code, ref pc);
-                        var value     = slotIndex < slots.Length ? slots[slotIndex] : default;
-                        stack[stackPtr++] = value;
+                        var slot = instruction.Operand;
+                        stack[depth++] = slot < slots.Length ? slots[slot] : 0;
                         break;
-                    }
-
                     case OpCode.LoadConstant:
-                    {
-                        var value = ReadSingle(code, ref pc);
-                        stack[stackPtr++] = value;
+                        stack[depth++] = _constants[instruction.Operand];
                         break;
-                    }
-
                     case OpCode.Add:
-                    {
-                        var b = stack[--stackPtr];
-                        var a = stack[--stackPtr];
-                        stack[stackPtr++] = a + b;
+                        depth--;
+                        stack[depth - 1] += stack[depth];
                         break;
-                    }
-
                     case OpCode.Subtract:
-                    {
-                        var b = stack[--stackPtr];
-                        var a = stack[--stackPtr];
-                        stack[stackPtr++] = a - b;
+                        depth--;
+                        stack[depth - 1] -= stack[depth];
                         break;
-                    }
-
                     case OpCode.Multiply:
-                    {
-                        var b = stack[--stackPtr];
-                        var a = stack[--stackPtr];
-                        stack[stackPtr++] = a * b;
+                        depth--;
+                        stack[depth - 1] *= stack[depth];
                         break;
-                    }
-
                     case OpCode.Divide:
-                    {
-                        var b = stack[--stackPtr];
-                        var a = stack[--stackPtr];
-                        stack[stackPtr++] = a / b;
+                        depth--;
+                        stack[depth - 1] /= stack[depth];
                         break;
-                    }
+                    case OpCode.Min:
+                        depth--;
+                        stack[depth - 1] = Math.Min(stack[depth - 1], stack[depth]);
+                        break;
+                    case OpCode.Max:
+                        depth--;
+                        stack[depth - 1] = Math.Max(stack[depth - 1], stack[depth]);
+                        break;
+                    case OpCode.Clamp:
+                        depth -= 2;
+                        var value = stack[depth - 1];
+                        var minimum = stack[depth];
+                        var maximum = stack[depth + 1];
+                        if (minimum > maximum || value < minimum)
+                            stack[depth - 1] = minimum;
+                        else if (value > maximum)
+                            stack[depth - 1] = maximum;
+                        break;
+                    case OpCode.Negate:
+                        stack[depth - 1] = -stack[depth - 1];
+                        break;
                 }
             }
 
-            return stackPtr > 0 ? stack[stackPtr - 1] : baseValue;
+            return stack[0];
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int ReadInt32(ReadOnlySpan<byte> code, ref int pc)
-        {
-            var value =
-                code[pc] | (code[pc + 1] << 8) | (code[pc + 2] << 16) | (code[pc + 3] << 24);
-            pc += 4;
-            return value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float ReadSingle(ReadOnlySpan<byte> code, ref int pc) =>
-            BitConverter.Int32BitsToSingle(ReadInt32(code, ref pc));
     }
 }

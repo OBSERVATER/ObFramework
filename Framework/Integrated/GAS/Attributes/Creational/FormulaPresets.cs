@@ -9,7 +9,11 @@ namespace ObFramework.Integrated.GAS.Attributes.Creational
             /// <summary>
             ///     (Base + Slot0) * Slot1.
             /// </summary>
-            public static FormulaFloat Default()
+            public static FormulaFloat Default() => CachedDefault;
+
+            private static readonly FormulaFloat CachedDefault = BuildDefault();
+
+            private static FormulaFloat BuildDefault()
             {
                 using var builder = Formulas.CreateFloat();
                 builder.LoadBase();
@@ -23,7 +27,11 @@ namespace ObFramework.Integrated.GAS.Attributes.Creational
             /// <summary>
             ///     ((Base + Slot0) * Slot1 + Slot2) * Slot3.
             /// </summary>
-            public static FormulaFloat Wow()
+            public static FormulaFloat Wow() => CachedWow;
+
+            private static readonly FormulaFloat CachedWow = BuildWow();
+
+            private static FormulaFloat BuildWow()
             {
                 using var builder = Formulas.CreateFloat();
                 builder.LoadBase();
@@ -44,7 +52,11 @@ namespace ObFramework.Integrated.GAS.Attributes.Creational
             /// <summary>
             ///     (Base + Slot0) * Slot1.
             /// </summary>
-            public static FormulaDouble Default()
+            public static FormulaDouble Default() => CachedDefault;
+
+            private static readonly FormulaDouble CachedDefault = BuildDefault();
+
+            private static FormulaDouble BuildDefault()
             {
                 using var builder = Formulas.CreateDouble();
                 builder.LoadBase();
@@ -58,7 +70,11 @@ namespace ObFramework.Integrated.GAS.Attributes.Creational
             /// <summary>
             ///     ((Base + Slot0) * Slot1 + Slot2) * Slot3.
             /// </summary>
-            public static FormulaDouble Wow()
+            public static FormulaDouble Wow() => CachedWow;
+
+            private static readonly FormulaDouble CachedWow = BuildWow();
+
+            private static FormulaDouble BuildWow()
             {
                 using var builder = Formulas.CreateDouble();
                 builder.LoadBase();
