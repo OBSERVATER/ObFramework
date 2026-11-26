@@ -18,6 +18,7 @@
 	<s:Boolean x:Key="/Default/AddReferences/RecentPaths/=D_003A_005CUnreal_0020Projects_005CObFramework_005Fexample_005CPlugins_005CUnrealSharp_005CBinaries_005CManaged_005Cnetstandard2_002E0_005CUnrealSharp_002ESourceGenerator_002EUtilities_002Edll/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/AddReferences/RecentPaths/=D_003A_005CUnreal_0020Projects_005CObFramework_005Fexample_005CPlugins_005CUnrealSharp_005CBinaries_005CManaged_005Cnetstandard2_002E0_005CUnrealSharp_002ESourceGenerators_002Edll/@EntryIndexedValue">True</s:Boolean>
 	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AAddressables_002Ecs_002Fl_003AC_0021_003FUsers_003FDaddy_003FAppData_003FRoaming_003FJetBrains_003FRider2026_002E2_003Fresharper_002Dhost_003FDecompilerCache_003Fdecompiler_003F39e37710a8254c44babd31e627d5824d1ea00_003F83_003Fff40ab54_003FAddressables_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
+	<s:String x:Key="/Default/CodeInspection/ExcludedFiles/FilesAndFoldersToSkip2/=7020124F_002D9FFC_002D4AC3_002D8F3D_002DAAB8E0240759_002Ff_003AAssert_002Ecs_002Fl_003AC_0021_003FUsers_003FDaddy_003FAppData_003FRoaming_003FJetBrains_003FRider2026_002E3_003Fresharper_002Dhost_003FDecompilerCache_003Fdecompiler_003Ff9a21a43cdc541d7bc2625db447db8a29c000_003Fc4_003F972a48ef_003FAssert_002Ecs/@EntryIndexedValue">ForceIncluded</s:String>
 	<s:String x:Key="/Default/Environment/AssemblyExplorer/XmlDocument/@EntryValue">&lt;AssemblyExplorer&gt;&#xD;
   &lt;Assembly Path="D:\Unreal Projects\ObFramework_example\Plugins\UnrealSharp\Binaries\Managed\net10.0\UnrealSharp.dll" /&gt;&#xD;
 &lt;/AssemblyExplorer&gt;</s:String>
@@ -31,6 +32,7 @@
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=e5b7a694_002Dc313_002D42e5_002Daea5_002D289711f822af/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="DamageEffectTest" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;TestAncestor&gt;&#xD;
     &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.DamageEffectTest&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.PoisonEffectTest&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
 	

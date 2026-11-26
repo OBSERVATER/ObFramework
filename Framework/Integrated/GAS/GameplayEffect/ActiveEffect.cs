@@ -9,12 +9,14 @@
         public EffectContext Context { get; }
 
         public int RemainingTicks { get; internal set; }
-
+        public int RemainingPeriodTicks { get; internal set; }
+        
         internal ActiveEffect(AGameplayEffect definition, EffectContext context)
         {
             Definition = definition;
             Context = context;
             RemainingTicks = definition.DurationTicks;
+            RemainingPeriodTicks = definition.PeriodTicks;
         }
     }
 }

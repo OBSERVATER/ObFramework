@@ -27,15 +27,24 @@ public class EffectTest
             health.SetBase(health.Base - damage);
         }
     }
+    public sealed class PoisonEffect(float damage) : AGameplayEffect(EEffectDurationType.Duration, durationTicks: 6, periodTicks: 2)
+    {
+        public override void OnApply(EffectContext context)
+        {
+        }
 
+        public override void OnPeriodic(EffectContext context)
+        {
+            var health = context.Target.Attributes.Get(Health);
+            health.SetBase(health.Base - damage);
+        }
+    }
     [Test]
     public void DamageEffectTest()
     {
         var player = new Enemy(100f);
         var enemy = new Enemy(100f);
-
         var effect = new DamageEffect(20f);
-
         var active = enemy.Gas.Effects.Apply(effect, player.Gas);
 
         using (Assert.EnterMultipleScope())
@@ -44,5 +53,27 @@ public class EffectTest
             Assert.That(player.Gas.Attributes.Get(Health).Value, Is.EqualTo(100f));
             Assert.That(active, Is.Null);
         }
+    }
+    [Test]
+    public void PoisonEffectTest()
+    {
+        var player = new Enemy(100f);
+        var enemy = new Enemy(100f);
+        var effect = new PoisonEffect(10);
+        var mgr = enemy.Gas.Effects;
+        mgr.Apply(effect, player.Gas);
+        int val = 100;
+        for (int i = 0; i < 7; i++)
+        {
+            if (i != 0 && i % 2 == 0)
+            {
+                val -= 10;
+            }
+            Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(val));
+            mgr.Tick();
+        }
+        mgr.Tick();
+        mgr.Tick();
+        Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(val));
     }
 }

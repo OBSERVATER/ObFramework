@@ -16,13 +16,15 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             definition.OnApply(context);
 
             if (definition.DurationType == EEffectDurationType.Instant)
-            {
                 return null;
-            }
 
             var active = new ActiveEffect(definition, context);
-
             _effects.Add(active);
+
+            if (definition is { PeriodTicks: > 0, ExecuteOnApplication: true })
+            {
+                definition.OnPeriodic(context);
+            }
 
             return active;
         }
@@ -42,18 +44,22 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             for (int i = _effects.Count - 1; i >= 0; i--)
             {
                 var effect = _effects[i];
+                var definition = effect.Definition;
 
-                if (effect.Definition.DurationType != EEffectDurationType.Duration)
+                if (definition.PeriodTicks > 0)
                 {
-                    continue;
+                    effect.RemainingPeriodTicks--;
+
+                    if (effect.RemainingPeriodTicks <= 0)
+                    {
+                        effect.RemainingPeriodTicks = definition.PeriodTicks;
+                        definition.OnPeriodic(effect.Context);
+                    }
                 }
 
+                if (definition.DurationType != EEffectDurationType.Duration) continue;
                 effect.RemainingTicks--;
-
-                if (effect.RemainingTicks > 0)
-                    continue;
-
-                Remove(effect);
+                if (effect.RemainingTicks <= 0) Remove(effect);
             }
         }
 
