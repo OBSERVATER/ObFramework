@@ -5,7 +5,7 @@ namespace ObFramework.Integrated.GAS.Attributes.Core
 {
     public sealed class AttributeSet : IDisposable
     {
-        private readonly Dictionary<AttributeKey, IDisposable> _attributes = new();
+        private readonly Dictionary<AAttributeKey, IDisposable> _attributes = new();
 
         public void Register<T>(AttributeKey<T> key, IAttribute<T> attribute) where T : struct
         {
@@ -17,12 +17,12 @@ namespace ObFramework.Integrated.GAS.Attributes.Core
             return (IAttribute<T>)_attributes[key];
         }
 
-        public bool Has(AttributeKey key)
+        public bool Has(AAttributeKey key)
         {
             return _attributes.ContainsKey(key);
         }
 
-        public bool Remove(AttributeKey key)
+        public bool Remove(AAttributeKey key)
         {
             if (!_attributes.Remove(key, out var attribute))
                 return false;
