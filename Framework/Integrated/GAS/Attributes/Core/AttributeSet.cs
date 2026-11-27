@@ -38,5 +38,10 @@ namespace ObFramework.Integrated.GAS.Attributes.Core
 
             _attributes.Clear();
         }
+        
+        public void Clear()
+        {
+            _attributes.Clear();
+        }
     }
 }

@@ -55,5 +55,11 @@ namespace ObFramework.Integrated.GAS.GameplayCue
         {
             Emitted?.Invoke(new CueEvent(tag, type, source, _owner, magnitude));
         }
+        
+        internal void Clear()
+        {
+            _persistent.Clear();
+            Emitted = null;
+        }
     }
 }

@@ -22,6 +22,8 @@ namespace ObFramework.Integrated.GAS
 
         public Task InitAsync(IPluginContext plugins, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
+
             _clock = plugins.Get<ClockPlugin>();
             _clock.RegisterTickable(this);
 
@@ -43,17 +45,19 @@ namespace ObFramework.Integrated.GAS
             if (system == null)
                 throw new ArgumentNullException(nameof(system));
 
-            if (_systems.Contains(system))
+            if (!system.IsAvailable || _systems.Contains(system))
                 return false;
 
             _systems.Add(system);
-
             return true;
         }
 
         public bool UnRegister(AbilitySystem system)
         {
-            var index = _systems.IndexOf(system);
+            if (system == null)
+                throw new ArgumentNullException(nameof(system));
+
+            int index = _systems.IndexOf(system);
 
             if (index < 0)
                 return false;
@@ -78,21 +82,27 @@ namespace ObFramework.Integrated.GAS
 
             try
             {
-                var count = _systems.Count;
+                int count = _systems.Count;
 
-                for (var i = 0; i < count && _clock != null; i++)
+                for (int i = 0; i < count && _clock != null; i++)
                 {
-                    _systems[i]?.Effects.Tick();
+                    var system = _systems[i];
+                    if (system is { IsAvailable: true })
+                        system.Effects.Tick();
                 }
 
-                for (var i = 0; i < count && _clock != null; i++)
+                // 第二阶段：推进所有 Ability
+                for (int i = 0; i < count && _clock != null; i++)
                 {
-                    _systems[i]?.Abilities.Tick();
+                    var system = _systems[i];
+
+                    if (system is { IsAvailable: true })
+                        system.Abilities.Tick();
                 }
             }
             finally
             {
-                _systems.RemoveAll(static system => system == null);
+                _systems.RemoveAll(static system => system == null || system.IsDisposed);
                 _ticking = false;
             }
         }

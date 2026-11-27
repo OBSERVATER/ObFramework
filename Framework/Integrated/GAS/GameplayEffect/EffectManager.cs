@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace ObFramework.Integrated.GAS.GameplayEffect
 {
@@ -6,6 +7,9 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
     {
         private AbilitySystem _owner;
         private readonly List<ActiveEffect> _effects = new();
+        private readonly List<ActiveEffect> _tickBuffer = new();
+
+        private bool _ticking;
         public EffectManager(AbilitySystem abilitySystem)
         {
             _owner = abilitySystem;
@@ -24,20 +28,16 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             {
                 foreach (var eff in _effects)
                 {
-                    if (!ReferenceEquals(eff.Definition, definition) ||
-                        !ReferenceEquals(eff.Context.Source, source))
+                    if (!ReferenceEquals(eff.Definition, definition) || !ReferenceEquals(eff.Context.Source, source))
                         continue;
 
                     eff.RemainingTicks = definition.DurationTicks;
-
                     var previous = eff.Stacks;
 
                     if (previous < definition.MaxStacks)
                     {
                         eff.Stacks++;
-
-                        definition.OnStackChanged(
-                            eff.Context, previous, eff.Stacks);
+                        definition.OnStackChanged(eff.Context, previous, eff.Stacks);
                     }
 
                     effect = eff;
@@ -77,29 +77,55 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
 
         public void Tick()
         {
-            for (int i = _effects.Count - 1; i >= 0; i--)
+            if (!_owner.IsAvailable) return;
+            
+            if (_ticking)
+                throw new InvalidOperationException("Effect tick cannot be reentered.");
+
+            _ticking = true;
+            try
             {
-                var effect = _effects[i];
-                var definition = effect.Definition;
+                _tickBuffer.AddRange(_effects);
 
-                if (definition.PeriodTicks > 0)
+                for (var i = _tickBuffer.Count - 1; i >= 0; i--)
                 {
-                    effect.RemainingPeriodTicks--;
+                    var effect = _tickBuffer[i];
 
-                    if (effect.RemainingPeriodTicks <= 0)
+                    if (effect.Stacks == 0) continue;
+
+                    var definition = effect.Definition;
+
+                    if (definition.PeriodTicks > 0)
                     {
-                        effect.RemainingPeriodTicks = definition.PeriodTicks;
-                        definition.OnPeriodic(effect.Context,effect.Stacks);
+                        effect.RemainingPeriodTicks--;
+                        if (effect.RemainingPeriodTicks <= 0)
+                        {
+                            effect.RemainingPeriodTicks = definition.PeriodTicks;
+                            definition.OnPeriodic(effect.Context, effect.Stacks);
+                        }
+                    }
+
+                    if (effect.Stacks == 0) continue;
+
+                    if (definition.DurationType == EEffectDurationType.Duration)
+                    {
+                        effect.RemainingTicks--;
+
+                        if (effect.RemainingTicks <= 0) Remove(effect);
                     }
                 }
-
-                if (definition.DurationType != EEffectDurationType.Duration) continue;
-                effect.RemainingTicks--;
-                if (effect.RemainingTicks <= 0) Remove(effect);
+            }
+            finally
+            {
+                _tickBuffer.Clear();
+                _ticking = false;
             }
         }
         public bool CanApply(GameplayEffect definition, AbilitySystem source)
         {
+            if (!_owner.IsAvailable)
+                return false;
+            
             var context = new EffectContext(source, _owner);
 
             foreach (var eff in _effects)

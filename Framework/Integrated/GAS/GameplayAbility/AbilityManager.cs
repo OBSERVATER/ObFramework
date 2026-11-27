@@ -17,7 +17,7 @@ namespace ObFramework.Integrated.GAS.GameplayAbility
             _owner = owner;
         }
 
-        public bool Grant(GameplayAbility definition) => _granted.Add(definition);
+        public bool Grant(GameplayAbility definition) => _owner.IsAvailable && _granted.Add(definition);
         public bool Revoke(GameplayAbility definition)
         {
             if (!_granted.Remove(definition))
@@ -36,6 +36,9 @@ namespace ObFramework.Integrated.GAS.GameplayAbility
         {
             active = null;
 
+            if (!_owner.IsAvailable)
+                return false;
+            
             if (!_granted.Contains(definition))
                 return false;
 
@@ -106,6 +109,8 @@ namespace ObFramework.Integrated.GAS.GameplayAbility
         }
         public void Tick()
         {
+            if (!_owner.IsAvailable) return;
+            
             if (_ticking)
                 throw new InvalidOperationException("Ability tick cannot be reentered.");
 
@@ -138,6 +143,13 @@ namespace ObFramework.Integrated.GAS.GameplayAbility
                 _tickBuffer.Clear();
                 _ticking = false;
             }
+        }
+        internal void Clear()
+        {
+            _granted.Clear();
+            var snapshot = new List<ActiveAbility>(_active.Values);
+            foreach (var ability in snapshot)
+                ability.Cancel();
         }
     }
 }
