@@ -5,7 +5,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
 {
     public sealed class EffectManager
     {
-        private AbilitySystem _owner;
+        private readonly AbilitySystem _owner;
         private readonly List<ActiveEffect> _effects = new();
         private readonly List<ActiveEffect> _tickBuffer = new();
 
@@ -32,7 +32,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
                         continue;
 
                     eff.RemainingTicks = definition.DurationTicks;
-                    var previous = eff.Stacks;
+                    int previous = eff.Stacks;
 
                     if (previous < definition.MaxStacks)
                     {
@@ -64,10 +64,13 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
 
         public bool Remove(ActiveEffect effect)
         {
-            if (!_effects.Remove(effect))
+            int lastIndex = _effects.Count - 1;
+            if (lastIndex >= 0 && ReferenceEquals(_effects[lastIndex], effect))
+                _effects.RemoveAt(lastIndex);
+            else if (!_effects.Remove(effect))
                 return false;
             
-            var previous = effect.Stacks;
+            int previous = effect.Stacks;
             effect.Stacks = 0;
             effect.Definition.OnStackChanged(effect.Context, previous, 0);
             effect.Definition.OnRemove(effect.Context);
@@ -87,7 +90,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             {
                 _tickBuffer.AddRange(_effects);
 
-                for (var i = _tickBuffer.Count - 1; i >= 0; i--)
+                for (int i = _tickBuffer.Count - 1; i >= 0; i--)
                 {
                     var effect = _tickBuffer[i];
 

@@ -5,8 +5,10 @@ namespace ObFramework.Integrated.GAS.GameplayTag
 {
     public sealed class TagContainer
     {
+        private const int MaxCachedParents = 128;
         private readonly Dictionary<GameplayTag, int> _tags = new();
         private readonly Dictionary<GameplayTag, int> _matchingTags = new();
+        private Dictionary<GameplayTag, GameplayTag>? _parents;
 
         public void Add(GameplayTag tag)
         {
@@ -66,22 +68,28 @@ namespace ObFramework.Integrated.GAS.GameplayTag
         {
             _tags.Clear();
             _matchingTags.Clear();
+            _parents = null;
         }
 
         private void UpdateHierarchy(GameplayTag tag, int delta)
         {
-            UpdateCount(tag, delta);
-
-            var name = tag.Name;
-            var index = name.LastIndexOf('.');
-
-            while (index >= 0)
+            while (true)
             {
-                name = name[..index];
+                UpdateCount(tag, delta);
+                if (_parents != null && _parents.TryGetValue(tag, out var parent))
+                {
+                    tag = parent;
+                    continue;
+                }
 
-                UpdateCount(new GameplayTag(name), delta);
+                var index = tag.Name.LastIndexOf('.');
+                if (index < 0) return;
 
-                index = name.LastIndexOf('.');
+                parent = new GameplayTag(tag.Name[..index]);
+                _parents ??= new Dictionary<GameplayTag, GameplayTag>();
+                if (_parents.Count < MaxCachedParents)
+                    _parents.Add(tag, parent);
+                tag = parent;
             }
         }
 
