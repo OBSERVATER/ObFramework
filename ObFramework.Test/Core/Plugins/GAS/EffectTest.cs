@@ -34,7 +34,7 @@ public class EffectTest
             ]
         );
 
-        var active = enemy.Gas.Effects.Apply(damage, player.Gas);
+        enemy.Gas.Effects.TryApply(damage, player.Gas, out var active);
 
         Assert.That(active, Is.Null);
         Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(80f));
@@ -62,14 +62,14 @@ public class EffectTest
         var health = enemy.Gas.Attributes.Get(Health);
         var tags = enemy.Gas.Tags;
 
-        var active = manager.Apply(poison, player.Gas)!;
+        manager.TryApply(poison, player.Gas, out var active);
 
         Assert.That(tags.Has(poisoned), Is.True);
         Assert.That(health.Value, Is.EqualTo(100f));
 
-        manager.Apply(poison, player.Gas);
+        manager.TryApply(poison, player.Gas, out active);
 
-        Assert.That(active.Stacks, Is.EqualTo(2));
+        Assert.That(active!.Stacks, Is.EqualTo(2));
         Assert.That(tags.GetCount(poisoned), Is.EqualTo(1));
 
         for (var i = 0; i < 6; i++)
@@ -83,5 +83,72 @@ public class EffectTest
         manager.Tick();
 
         Assert.That(health.Value, Is.EqualTo(40f));
+    }
+    [Test]
+    public void TagRequirementTest()
+    {
+        var enemy = new Enemy(50f);
+
+        var dead = new GameplayTag("State.Dead");
+
+        var heal = new GameplayEffect(EEffectDurationType.Instant,
+            [
+                new BaseComponent(Health, 20f),
+                new TagRequirementComponent(blocked: [dead])
+            ]
+        );
+
+        var gas = enemy.Gas;
+        var health = gas.Attributes.Get(Health);
+
+        gas.Tags.Add(dead);
+
+        Assert.That(gas.Effects.TryApply(heal, gas, out _), Is.False);
+        Assert.That(health.Value, Is.EqualTo(50f));
+        gas.Tags.Remove(dead);
+        Assert.That(gas.Effects.TryApply(heal, gas, out _), Is.True);
+        Assert.That(health.Value, Is.EqualTo(70f));
+    }
+    [Test]
+    public void ImmunityTest()
+    {
+        var player = new Enemy(100f);
+        var enemy = new Enemy(100f);
+
+        var damageTag = new GameplayTag("Effect.Damage");
+        var fireTag = new GameplayTag("Effect.Damage.Fire");
+
+        var damage = new GameplayEffect(
+            EEffectDurationType.Instant,
+            [new BaseComponent(Health, -20f)],
+            effectTags: [fireTag]
+        );
+
+        var immunity = new GameplayEffect(
+            EEffectDurationType.Duration,
+            [new ImmunityComponent(damageTag)],
+            durationTicks: 3
+        );
+
+        var gas = enemy.Gas;
+        var manager = gas.Effects;
+        var health = gas.Attributes.Get(Health);
+
+        // 自身获得无敌效果
+        manager.TryApply(immunity, gas,out _);
+
+        // 无敌期间拒绝伤害
+        Assert.That(manager.TryApply(damage, player.Gas, out _), Is.False);
+        Assert.That(health.Value, Is.EqualTo(100f));
+
+        // 无敌效果到期
+        manager.Tick();
+        manager.Tick();
+        manager.Tick();
+
+        // 恢复正常受伤
+        Assert.That(manager.TryApply(damage, player.Gas, out _), Is.True);
+
+        Assert.That(health.Value, Is.EqualTo(80f));
     }
 }

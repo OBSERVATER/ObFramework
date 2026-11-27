@@ -10,32 +10,49 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         {
             _owner = abilitySystem;
         }
-        public ActiveEffect? Apply(GameplayEffect definition, AbilitySystem source)
+        public bool TryApply(GameplayEffect definition, AbilitySystem source, out ActiveEffect? effect)
         {
+            effect = null;
+            var context = new EffectContext(source, _owner);
+
+            foreach (var eff in _effects)
+            {
+                if (eff.Definition.BlocksIncoming(definition, context))
+                    return false;
+            }
+
+            if (!definition.CanApply(context))
+                return false;
+
             if (definition.MaxStacks > 0)
             {
                 foreach (var eff in _effects)
                 {
-                    if (!ReferenceEquals(eff.Definition, definition) || !ReferenceEquals(eff.Context.Source, source))
+                    if (!ReferenceEquals(eff.Definition, definition) ||
+                        !ReferenceEquals(eff.Context.Source, source))
                         continue;
 
                     eff.RemainingTicks = definition.DurationTicks;
+
                     var previous = eff.Stacks;
 
                     if (previous < definition.MaxStacks)
                     {
                         eff.Stacks++;
-                        definition.OnStackChanged(eff.Context,previous,eff.Stacks);
+
+                        definition.OnStackChanged(
+                            eff.Context, previous, eff.Stacks);
                     }
 
-                    return eff;
+                    effect = eff;
+                    return true;
                 }
             }
-            var context = new EffectContext(source, _owner);
+            
             definition.OnApply(context);
 
             if (definition.DurationType == EEffectDurationType.Instant)
-                return null;
+                return true;
 
             var active = new ActiveEffect(definition, context);
             _effects.Add(active);
@@ -45,7 +62,8 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
                 definition.OnPeriodic(context,active.Stacks);
             }
 
-            return active;
+            effect = active;
+            return true;
         }
 
         public bool Remove(ActiveEffect effect)

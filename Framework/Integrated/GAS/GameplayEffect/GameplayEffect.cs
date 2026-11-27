@@ -1,5 +1,6 @@
 ﻿using System;
 using ObFramework.Integrated.GAS.GameplayEffect.Components;
+using Tag = ObFramework.Integrated.GAS.GameplayTag.GameplayTag;
 
 namespace ObFramework.Integrated.GAS.GameplayEffect
 {
@@ -14,14 +15,15 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         public bool ExecuteOnApplication { get; }
         public int MaxStacks { get; }
         private readonly AEffectComponent[] _components;
-        
+        private readonly Tag[] _effectTags;
         public GameplayEffect(
             EEffectDurationType durationType,
             AEffectComponent[] components,
             int durationTicks = 0,
             int periodTicks = 0,
             bool executeOnApplication = false,
-            int maxStacks = 0)
+            int maxStacks = 0,
+            Tag[]? effectTags = null)
         {
             if (durationType == EEffectDurationType.Duration && durationTicks <= 0)
                 throw new ArgumentOutOfRangeException(nameof(durationTicks));
@@ -40,12 +42,18 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             PeriodTicks = periodTicks;
             ExecuteOnApplication = executeOnApplication;
             MaxStacks = maxStacks;
-
+            
             if (components == null)
                 throw new ArgumentNullException(nameof(components));
 
             _components = (AEffectComponent[])components.Clone();
+            _effectTags = effectTags == null ? Array.Empty<Tag>() : (Tag[])effectTags.Clone();
 
+            foreach (var tag in _effectTags)
+            {
+                if (!tag.IsValid)
+                    throw new ArgumentException("Invalid effect tag.");
+            }
             foreach (var component in _components)
             {
                 if (component == null)
@@ -90,6 +98,38 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             {
                 component.OnStackChanged(context,previous,now);
             }
+        }
+        public bool HasTag(Tag tag)
+        {
+            foreach (var owned in _effectTags)
+            {
+                if (owned.Matches(tag))
+                    return true;
+            }
+
+            return false;
+        }
+
+        internal bool CanApply(EffectContext context)
+        {
+            foreach (var component in _components)
+            {
+                if (!component.CanApply(context))
+                    return false;
+            }
+
+            return true;
+        }
+
+        internal bool BlocksIncoming(GameplayEffect incoming, EffectContext incomingContext)
+        {
+            foreach (var component in _components)
+            {
+                if (component.BlockIncoming(incoming, incomingContext))
+                    return true;
+            }
+
+            return false;
         }
     }
 }
