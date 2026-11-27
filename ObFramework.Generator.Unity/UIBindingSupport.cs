@@ -378,7 +378,7 @@ namespace ObFramework.Generator.Unity
                     return value;
             }
 
-            if (!(attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is AttributeSyntax syntax) ||
+            if (attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is not AttributeSyntax syntax ||
                 syntax.ArgumentList == null || syntax.ArgumentList.Arguments.Count <= index)
                 return null;
             return NameFromExpression(syntax.ArgumentList.Arguments[index].Expression);
@@ -613,7 +613,7 @@ namespace ObFramework.Generator.Unity
                     continue;
                 }
 
-                if (!(field.Type is INamedTypeSymbol))
+                if (field.Type is not INamedTypeSymbol)
                 {
                     Add(result, UIBindingDiagnostics.UnsupportedControl, location,
                         $"Binding field '{controller.Name}.{field.Name}' has unsupported control type '{field.Type}'.");
@@ -970,7 +970,7 @@ namespace ObFramework.Generator.Unity
             {
                 if (named.Key != "Mode")
                     continue;
-                if (!(named.Value.Value is int raw) || (raw != OneWayMode && raw != TwoWayMode))
+                if (named.Value.Value is not int raw || (raw != OneWayMode && raw != TwoWayMode))
                 {
                     reported = true;
                     return false;

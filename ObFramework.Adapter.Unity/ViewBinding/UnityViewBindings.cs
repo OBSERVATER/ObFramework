@@ -141,7 +141,7 @@ namespace ObFramework.Adapter.Unity.ViewBinding
                     if (controllerArchitecture != null && !ReferenceEquals(controllerArchitecture, _architecture))
                         throw new InvalidOperationException($"View controller '{controller.GetType().FullName}' resolves a different architecture than the active view-binding runtime; generated GetArchitecture() and the bootstrapped architecture must agree.");
                 }
-                if (!(controller is IUIWindow) && view is AUIView childView)
+                if (controller is not IUIWindow && view is AUIView childView)
                     childView.InitView(null);
                 binding.Initialize(view);
                 if (!controller)
