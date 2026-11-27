@@ -1,4 +1,5 @@
 ﻿using ObFramework.Integrated.GAS.Attributes.Core;
+using ObFramework.Integrated.GAS.GameplayAbility;
 using ObFramework.Integrated.GAS.GameplayEffect;
 using ObFramework.Integrated.GAS.GameplayTag;
 
@@ -9,10 +10,11 @@ namespace ObFramework.Integrated.GAS
         public AttributeSet Attributes { get; } = new();
         public TagContainer Tags { get; } = new();
         public EffectManager Effects { get; }
-
+        public AbilityManager Abilities { get; }
         public AbilitySystem()
         {
             Effects = new EffectManager(this);
+            Abilities = new AbilityManager(this);
         }
     }
 

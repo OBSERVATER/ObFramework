@@ -13,16 +13,12 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         public bool TryApply(GameplayEffect definition, AbilitySystem source, out ActiveEffect? effect)
         {
             effect = null;
-            var context = new EffectContext(source, _owner);
 
-            foreach (var eff in _effects)
+            if (!CanApply(definition, source))
             {
-                if (eff.Definition.BlocksIncoming(definition, context))
-                    return false;
-            }
-
-            if (!definition.CanApply(context))
                 return false;
+            }
+            var context = new EffectContext(source, _owner);
 
             if (definition.MaxStacks > 0)
             {
@@ -102,7 +98,18 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
                 if (effect.RemainingTicks <= 0) Remove(effect);
             }
         }
+        public bool CanApply(GameplayEffect definition, AbilitySystem source)
+        {
+            var context = new EffectContext(source, _owner);
 
+            foreach (var eff in _effects)
+            {
+                if (eff.Definition.BlocksIncoming(definition, context))
+                    return false;
+            }
+
+            return definition.CanApply(context);
+        }
         public void Clear()
         {
             while (_effects.Count > 0)
