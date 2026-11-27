@@ -1,5 +1,6 @@
 ﻿using ObFramework.Integrated.GAS.Attributes.Core;
 using ObFramework.Integrated.GAS.GameplayAbility;
+using ObFramework.Integrated.GAS.GameplayCue;
 using ObFramework.Integrated.GAS.GameplayEffect;
 using ObFramework.Integrated.GAS.GameplayTag;
 
@@ -11,10 +12,12 @@ namespace ObFramework.Integrated.GAS
         public TagContainer Tags { get; } = new();
         public EffectManager Effects { get; }
         public AbilityManager Abilities { get; }
+        public CueDispatcher Cues { get; }
         public AbilitySystem()
         {
             Effects = new EffectManager(this);
             Abilities = new AbilityManager(this);
+            Cues = new CueDispatcher(this);
         }
     }
 
