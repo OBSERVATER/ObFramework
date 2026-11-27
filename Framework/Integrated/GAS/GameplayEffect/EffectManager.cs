@@ -12,6 +12,25 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         }
         public ActiveEffect? Apply(AGameplayEffect definition, AbilitySystem source)
         {
+            if (definition.MaxStacks > 0)
+            {
+                foreach (var eff in _effects)
+                {
+                    if (!ReferenceEquals(eff.Definition, definition) || !ReferenceEquals(eff.Context.Source, source))
+                        continue;
+
+                    eff.RemainingTicks = definition.DurationTicks;
+                    var previous = eff.Stacks;
+
+                    if (previous < definition.MaxStacks)
+                    {
+                        eff.Stacks++;
+                        definition.OnStackChanged(eff.Context,previous,eff.Stacks);
+                    }
+
+                    return eff;
+                }
+            }
             var context = new EffectContext(source, _owner);
             definition.OnApply(context);
 
@@ -20,7 +39,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
 
             var active = new ActiveEffect(definition, context);
             _effects.Add(active);
-
+            definition.OnStackChanged(context, 0, 1);
             if (definition is { PeriodTicks: > 0, ExecuteOnApplication: true })
             {
                 definition.OnPeriodic(context);
@@ -33,7 +52,10 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         {
             if (!_effects.Remove(effect))
                 return false;
-
+            
+            var previous = effect.Stacks;
+            effect.Stacks = 0;
+            effect.Definition.OnStackChanged(effect.Context, previous, 0);
             effect.Definition.OnRemove(effect.Context);
 
             return true;
@@ -53,7 +75,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
                     if (effect.RemainingPeriodTicks <= 0)
                     {
                         effect.RemainingPeriodTicks = definition.PeriodTicks;
-                        definition.OnPeriodic(effect.Context);
+                        definition.OnPeriodic(effect.Context,effect.Stacks);
                     }
                 }
 

@@ -33,6 +33,7 @@
   &lt;TestAncestor&gt;&#xD;
     &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.DamageEffectTest&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.PoisonEffectTest&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.StackingPoisonTest&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
 	

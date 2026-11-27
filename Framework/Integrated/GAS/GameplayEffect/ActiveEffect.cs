@@ -7,7 +7,7 @@
     {
         public AGameplayEffect Definition { get; }
         public EffectContext Context { get; }
-
+        public int Stacks { get; internal set; } = 1;
         public int RemainingTicks { get; internal set; }
         public int RemainingPeriodTicks { get; internal set; }
         

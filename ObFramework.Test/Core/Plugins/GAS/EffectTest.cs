@@ -39,6 +39,22 @@ public class EffectTest
             health.SetBase(health.Base - damage);
         }
     }
+    public sealed class StackingPoison(float damage) : AGameplayEffect(
+            EEffectDurationType.Duration,
+            durationTicks: 6,
+            periodTicks: 2,
+            maxStacks: 3)
+    {
+        public override void OnApply(EffectContext context)
+        {
+        }
+
+        public override void OnPeriodic(EffectContext context, int stacks)
+        {
+            var health = context.Target.Attributes.Get(Health);
+            health.SetBase(health.Base - damage * stacks);
+        }
+    }
     [Test]
     public void DamageEffectTest()
     {
@@ -75,5 +91,53 @@ public class EffectTest
         mgr.Tick();
         mgr.Tick();
         Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(val));
+    }
+    [Test]
+    public void StackingPoisonTest()
+    {
+        var player = new Enemy(100f);
+        var enemy = new Enemy(100f);
+
+        var poison = new StackingPoison(10f);
+
+        var manager = enemy.Gas.Effects;
+        var health = enemy.Gas.Attributes.Get(Health);
+
+        var active = manager.Apply(poison, player.Gas)!;
+
+        Assert.That(active.Stacks, Is.EqualTo(1));
+
+        manager.Tick();
+        var second = manager.Apply(poison, player.Gas);
+
+        Assert.That(second, Is.SameAs(active));
+        Assert.That(active.Stacks, Is.EqualTo(2));
+        Assert.That(active.RemainingTicks, Is.EqualTo(6));
+
+        // 周期没有被重置，因此此时扣除20点生命
+        manager.Tick();
+
+        Assert.That(health.Value, Is.EqualTo(80f));
+
+        manager.Apply(poison, player.Gas);
+        manager.Apply(poison, player.Gas);
+
+        // 验证最大层数
+        Assert.That(active.Stacks, Is.EqualTo(3));
+
+        manager.Tick();
+        manager.Tick();
+
+        Assert.That(health.Value, Is.EqualTo(50f));
+
+        // 主动移除
+        manager.Remove(active);
+
+        Assert.That(active.Stacks, Is.Zero);
+
+        manager.Tick();
+        manager.Tick();
+
+        Assert.That(health.Value, Is.EqualTo(50f));
     }
 }
