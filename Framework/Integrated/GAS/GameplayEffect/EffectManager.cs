@@ -10,7 +10,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
         {
             _owner = abilitySystem;
         }
-        public ActiveEffect? Apply(AGameplayEffect definition, AbilitySystem source)
+        public ActiveEffect? Apply(GameplayEffect definition, AbilitySystem source)
         {
             if (definition.MaxStacks > 0)
             {
@@ -42,7 +42,7 @@ namespace ObFramework.Integrated.GAS.GameplayEffect
             definition.OnStackChanged(context, 0, 1);
             if (definition is { PeriodTicks: > 0, ExecuteOnApplication: true })
             {
-                definition.OnPeriodic(context);
+                definition.OnPeriodic(context,active.Stacks);
             }
 
             return active;

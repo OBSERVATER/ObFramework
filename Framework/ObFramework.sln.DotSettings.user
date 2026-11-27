@@ -25,17 +25,17 @@
 	<s:Boolean x:Key="/Default/Environment/Hierarchy/Build/SolutionBuilderNext/ShouldRestoreNugetPackages/@EntryValue">True</s:Boolean>
 	<s:Int64 x:Key="/Default/Environment/Hierarchy/Build/BuildTool/MsbuildVersion/@EntryValue">4294967293</s:Int64>
 	<s:String x:Key="/Default/Environment/Hierarchy/Build/BuildTool/CustomBuildToolPath/@EntryValue">C:\Program Files\dotnet\sdk\8.0.303\MSBuild.dll</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=187b4909_002Dc003_002D4a8d_002D972b_002D531edda97adf/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="会话" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;And&gt;&#xD;
+    &lt;Namespace&gt;ObFramework.Test.Core.Plugins.GAS&lt;/Namespace&gt;&#xD;
+    &lt;Project Location="D:\project\ObFramework\ObFramework.Test" Presentation="&amp;lt;ObFramework.Test&amp;gt;" /&gt;&#xD;
+  &lt;/And&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
 	
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=58c56b00_002Df81e_002D48fd_002Da74f_002Dc8e84271fcf4/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="Continuous Testing" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;Solution /&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=e5b7a694_002Dc313_002D42e5_002Daea5_002D289711f822af/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="DamageEffectTest" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
-  &lt;TestAncestor&gt;&#xD;
-    &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.DamageEffectTest&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.PoisonEffectTest&lt;/TestId&gt;&#xD;
-    &lt;TestId&gt;NUnit3x::12F71B7A-2B67-4E1F-903F-42BA3F9F55A4::net8.0::ObFramework.Test.Core.Plugins.GAS.EffectTest.StackingPoisonTest&lt;/TestId&gt;&#xD;
-  &lt;/TestAncestor&gt;&#xD;
-&lt;/SessionState&gt;</s:String>
+	
 	
 	
 	</wpf:ResourceDictionary>

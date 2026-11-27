@@ -1,6 +1,8 @@
 ﻿using ObFramework.Integrated.GAS;
 using ObFramework.Integrated.GAS.Attributes.Core;
 using ObFramework.Integrated.GAS.GameplayEffect;
+using ObFramework.Integrated.GAS.GameplayEffect.Components;
+using ObFramework.Integrated.GAS.GameplayTag;
 
 namespace ObFramework.Test.Core.Plugins.GAS;
 
@@ -19,125 +21,67 @@ public class EffectTest
         }
     }
 
-    public sealed class DamageEffect(float damage) : AGameplayEffect(EEffectDurationType.Instant)
+    [Test]
+    public void InstantComponentTest()
     {
-        public override void OnApply(EffectContext context)
-        {
-            var health = context.Target.Attributes.Get(Health);
-            health.SetBase(health.Base - damage);
-        }
-    }
-    public sealed class PoisonEffect(float damage) : AGameplayEffect(EEffectDurationType.Duration, durationTicks: 6, periodTicks: 2)
-    {
-        public override void OnApply(EffectContext context)
-        {
-        }
+        var player = new Enemy(100f);
+        var enemy = new Enemy(100f);
 
-        public override void OnPeriodic(EffectContext context)
-        {
-            var health = context.Target.Attributes.Get(Health);
-            health.SetBase(health.Base - damage);
-        }
+        var damage = new GameplayEffect(
+            EEffectDurationType.Instant,
+            [
+                new BaseComponent(Health, -20f)
+            ]
+        );
+
+        var active = enemy.Gas.Effects.Apply(damage, player.Gas);
+
+        Assert.That(active, Is.Null);
+        Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(80f));
     }
-    public sealed class StackingPoison(float damage) : AGameplayEffect(
+    [Test]
+    public void PeriodicComponentsTest()
+    {
+        var player = new Enemy(100f);
+        var enemy = new Enemy(100f);
+
+        var poisoned = new GameplayTag("State.Poisoned");
+
+        var poison = new GameplayEffect(
             EEffectDurationType.Duration,
+            [
+                new BaseComponent(Health, -10f, periodic: true),
+                new TagComponent(poisoned)
+            ],
             durationTicks: 6,
             periodTicks: 2,
-            maxStacks: 3)
-    {
-        public override void OnApply(EffectContext context)
-        {
-        }
-
-        public override void OnPeriodic(EffectContext context, int stacks)
-        {
-            var health = context.Target.Attributes.Get(Health);
-            health.SetBase(health.Base - damage * stacks);
-        }
-    }
-    [Test]
-    public void DamageEffectTest()
-    {
-        var player = new Enemy(100f);
-        var enemy = new Enemy(100f);
-        var effect = new DamageEffect(20f);
-        var active = enemy.Gas.Effects.Apply(effect, player.Gas);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(80f));
-            Assert.That(player.Gas.Attributes.Get(Health).Value, Is.EqualTo(100f));
-            Assert.That(active, Is.Null);
-        }
-    }
-    [Test]
-    public void PoisonEffectTest()
-    {
-        var player = new Enemy(100f);
-        var enemy = new Enemy(100f);
-        var effect = new PoisonEffect(10);
-        var mgr = enemy.Gas.Effects;
-        mgr.Apply(effect, player.Gas);
-        int val = 100;
-        for (int i = 0; i < 7; i++)
-        {
-            if (i != 0 && i % 2 == 0)
-            {
-                val -= 10;
-            }
-            Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(val));
-            mgr.Tick();
-        }
-        mgr.Tick();
-        mgr.Tick();
-        Assert.That(enemy.Gas.Attributes.Get(Health).Value, Is.EqualTo(val));
-    }
-    [Test]
-    public void StackingPoisonTest()
-    {
-        var player = new Enemy(100f);
-        var enemy = new Enemy(100f);
-
-        var poison = new StackingPoison(10f);
+            maxStacks: 3
+        );
 
         var manager = enemy.Gas.Effects;
         var health = enemy.Gas.Attributes.Get(Health);
+        var tags = enemy.Gas.Tags;
 
         var active = manager.Apply(poison, player.Gas)!;
 
-        Assert.That(active.Stacks, Is.EqualTo(1));
+        Assert.That(tags.Has(poisoned), Is.True);
+        Assert.That(health.Value, Is.EqualTo(100f));
 
-        manager.Tick();
-        var second = manager.Apply(poison, player.Gas);
+        manager.Apply(poison, player.Gas);
 
-        Assert.That(second, Is.SameAs(active));
         Assert.That(active.Stacks, Is.EqualTo(2));
-        Assert.That(active.RemainingTicks, Is.EqualTo(6));
+        Assert.That(tags.GetCount(poisoned), Is.EqualTo(1));
 
-        // 周期没有被重置，因此此时扣除20点生命
-        manager.Tick();
+        for (var i = 0; i < 6; i++)
+            manager.Tick();
 
-        Assert.That(health.Value, Is.EqualTo(80f));
-
-        manager.Apply(poison, player.Gas);
-        manager.Apply(poison, player.Gas);
-
-        // 验证最大层数
-        Assert.That(active.Stacks, Is.EqualTo(3));
-
-        manager.Tick();
-        manager.Tick();
-
-        Assert.That(health.Value, Is.EqualTo(50f));
-
-        // 主动移除
-        manager.Remove(active);
-
+        Assert.That(health.Value, Is.EqualTo(40f));
+        Assert.That(tags.Has(poisoned), Is.False);
         Assert.That(active.Stacks, Is.Zero);
 
         manager.Tick();
         manager.Tick();
 
-        Assert.That(health.Value, Is.EqualTo(50f));
+        Assert.That(health.Value, Is.EqualTo(40f));
     }
 }

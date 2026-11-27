@@ -5,13 +5,13 @@
     /// </summary>
     public sealed class ActiveEffect
     {
-        public AGameplayEffect Definition { get; }
+        public GameplayEffect Definition { get; }
         public EffectContext Context { get; }
         public int Stacks { get; internal set; } = 1;
         public int RemainingTicks { get; internal set; }
         public int RemainingPeriodTicks { get; internal set; }
         
-        internal ActiveEffect(AGameplayEffect definition, EffectContext context)
+        internal ActiveEffect(GameplayEffect definition, EffectContext context)
         {
             Definition = definition;
             Context = context;
