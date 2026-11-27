@@ -37,7 +37,19 @@ namespace ObFramework.Cli.Commands.Table
             if (string.IsNullOrWhiteSpace(config.Target))
                 throw new SetupConfigException("modules.luban.target must not be empty.");
 
-            var agentDll = string.IsNullOrWhiteSpace(config.AgentDll) ? null : Resolve(config.AgentDll);
+            Task<int> RunPrimary() => RunPrimaryAsync(action, root!, config, conf, lubanDll, codeDir, dataDir, dataOnly, codeOnly, ct);
+            if (string.IsNullOrEmpty(config.GasConfPath)) return await RunPrimary();
+
+            var gasConf = Resolve(config.GasConfPath);
+            return await GasTableExport.RunAsync(lubanDll, root!, gasConf, codeDir, dataDir,
+                action == "generate" && !dataOnly, action == "generate" && !codeOnly,
+                Path.GetRelativePath(conf, gasConf) == "." ? null : RunPrimary, ct);
+        }
+
+        private static async Task<int> RunPrimaryAsync(string action, string root, LubanSetupConfig config,
+            string conf, string lubanDll, string codeDir, string dataDir, bool dataOnly, bool codeOnly, CancellationToken ct)
+        {
+            var agentDll = string.IsNullOrWhiteSpace(config.AgentDll) ? null : SetupConfigPaths.GetFullModulePath(root, config.AgentDll);
             if (action == "validate")
             {
                 if (agentDll != null && File.Exists(agentDll))
@@ -58,7 +70,7 @@ namespace ObFramework.Cli.Commands.Table
             return await StartAsync(lubanDll, root!, ct, [..args]);
         }
 
-        private static async Task<int> StartAsync(string dll, string workingDirectory, CancellationToken ct, params string[] args)
+        internal static async Task<int> StartAsync(string dll, string workingDirectory, CancellationToken ct, params string[] args)
         {
             var start = new ProcessStartInfo("dotnet")
             {

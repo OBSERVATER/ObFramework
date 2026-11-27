@@ -1,0 +1,30 @@
+<module>
+  <bean name="AttributesRow">
+    <var name="key" type="string" />
+    <var name="comment" type="string" />
+  </bean>
+  <table name="Attributes" value="AttributesRow" mode="list" input="Attributes@Attribute.xlsx" />
+  <bean name="EffectsRow">
+    <var name="id" type="int" />
+    <var name="name" type="string" />
+    <var name="durationType" type="string" />
+    <var name="durationTicks" type="int" />
+    <var name="periodTicks" type="int" />
+  </bean>
+  <table name="Effects" value="EffectsRow" mode="list" input="Effects@Effect.xlsx" />
+  <bean name="ComponentsRow">
+    <var name="effectId" type="int" />
+    <var name="type" type="string" />
+    <var name="attribute" type="string" />
+    <var name="value" type="float" />
+    <var name="periodic" type="bool" />
+  </bean>
+  <table name="Components" value="ComponentsRow" mode="list" input="Components@Effect.xlsx" />
+  <bean name="AbilitiesRow">
+    <var name="id" type="int" />
+    <var name="name" type="string" />
+    <var name="effectId" type="int" />
+    <var name="commitEffectId" type="int" />
+  </bean>
+  <table name="Abilities" value="AbilitiesRow" mode="list" input="Abilities@Ability.xlsx" />
+</module>

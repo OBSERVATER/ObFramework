@@ -29,9 +29,9 @@ namespace ObFramework.Cli.Commands.Init
                 document.SetModuleConfig("unity", new UnitySetupConfig());
                 changed = true;
             }
-            if (!document.HasModuleSection("luban"))
+            if (context.LubanPaths != null || !document.HasModuleSection("luban"))
             {
-                document.SetModuleConfig("luban", new LubanSetupConfig());
+                document.SetModuleConfig("luban", context.LubanPaths ?? new LubanSetupConfig());
                 changed = true;
             }
             if (!document.HasModuleSection("diagnostics"))

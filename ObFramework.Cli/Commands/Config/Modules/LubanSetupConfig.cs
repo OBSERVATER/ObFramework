@@ -17,6 +17,9 @@ namespace ObFramework.Cli.Commands.Config.Modules
         [SetupPath]
         public string DataOutputRoot { get; set; } = "Generated/Config/Data";
 
+        [SetupPath(AllowEmpty = true)]
+        public string GasConfPath { get; set; } = "";
+
         public string Target { get; set; } = "client";
     }
 }

@@ -113,10 +113,10 @@ internal static class UnityProject
         SaveObject(path, manifest);
     }
 
-    public static string ResourceChoice(string root)
+    public static string ResourceChoice(string root, string fallback = "custom")
     {
         var installation = LoadObject(Path.Combine(root, "setup.json"))["modules"]?["installation"];
-        var choice = installation?["resources"]?.GetValue<string>() ?? "custom";
+        var choice = installation?["resources"]?.GetValue<string>() ?? fallback;
         if (choice is not ("custom" or "addressables"))
             throw new InvalidOperationException("Set modules.installation.resources in setup.json to 'custom' or 'addressables'.");
         return choice;

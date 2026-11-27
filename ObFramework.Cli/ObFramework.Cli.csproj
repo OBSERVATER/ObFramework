@@ -70,6 +70,7 @@
                       LogicalName="ObFramework.Cli.UnityBootstrap/%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="Resources/UnityBootstrap/GameLauncher.cs.txt" LogicalName="ObFramework.Cli.UnityBootstrap/GameLauncher.cs" WithCulture="false" />
     <EmbeddedResource Include="../ObFramework.Adapter.Unity/Integrations/Addressables/*" LogicalName="ObFramework.Cli.Addressables/%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Resources/GasStarter/*" LogicalName="GasStarter/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Resources/UnityGuide.md" LogicalName="ObFramework.Cli.UnityGuide.md" />
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute"><_Parameter1>ObFramework.Test</_Parameter1></AssemblyAttribute>
   </ItemGroup>

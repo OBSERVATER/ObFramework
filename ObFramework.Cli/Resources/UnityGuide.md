@@ -26,7 +26,7 @@ Unity plugins you configure. `CreateApplication()` passes the complete plugin li
 Use `StartGameAsync` for Unity startup work such as opening the first window. An exit button can
 call `RequestExit()` on the running `GameApplication`. Put application cleanup in `StopGameAsync()`.
 
-The default resource backend is `custom`. No Addressables or YooAsset package is required by the
+New Unity projects default to Addressables. Use `ob init --resources custom` for a game-provided adapter. No Addressables or YooAsset package is required by the
 base framework. Implement `IAssetAdapter<TNativeHandle>` and, if raw-file loading is needed,
 `IRawFileAdapter<TNativeHandle>`. Pass the adapter to `ResourcePlugin.Create(adapter)` and pass that
 resource plugin to `UnityUIAdapter`. The launcher and prefab belong to the game project after creation.

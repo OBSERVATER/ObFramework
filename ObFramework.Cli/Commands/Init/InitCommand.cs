@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using NuGet.Versioning;
+using ObFramework.Cli.Commands.Config.Modules;
 using ObFramework.Cli.Unity;
 using ObFramework.Cli.Commands.Config;
 using ObFramework.Cli.Deployment;
@@ -18,7 +19,21 @@ namespace ObFramework.Cli.Commands.Init
 
             [CommandOption("--engine <ENGINE>")]
             [Description("unity, godot, unreal or auto (default).")]
-            public string Engine { get; set; } = "auto";
+            public string? Engine { get; set; }
+
+            [CommandOption("--resources <BACKEND>")]
+            [Description("Unity resource backend: addressables (default) or custom.")]
+            public string? Resources { get; set; }
+
+            internal LubanSetupConfig? LubanPaths { get; set; }
+
+            [CommandOption("--non-interactive")]
+            [Description("Use supplied options and defaults without prompting.")]
+            public bool NonInteractive { get; set; }
+
+            [CommandOption("--gas")]
+            [Description("Initialize the GAS Excel starter for Luban.")]
+            public bool Gas { get; set; }
 
             [CommandOption("--skip-download")]
             [Description("Skip Luban installation; still update setup.json and engine tooling.")]
@@ -35,12 +50,26 @@ namespace ObFramework.Cli.Commands.Init
             public bool SkipPackages { get; set; }
         }
 
+        internal static string ParseResources(string value) => value.Trim().ToLowerInvariant() switch
+        {
+            "custom" => "custom",
+            "addressables" => "addressables",
+            _ => throw new ArgumentException("Expected addressables or custom for Unity resources.")
+        };
+
         public override int Execute(CommandContext commandContext, Settings settings, CancellationToken cancellationToken)
         {
             try
             {
+                if (settings.NonInteractive && string.IsNullOrWhiteSpace(settings.Root))
+                    throw new ArgumentException("--non-interactive requires --root.");
+                if (!settings.NonInteractive && !Console.IsInputRedirected)
+                    new InitWizard(Console.In, Console.Out).Configure(settings);
+
                 var root = SetupConfigPaths.ValidateAbsoluteRoot(Path.GetFullPath(settings.Root ?? Directory.GetCurrentDirectory()));
                 var engine = EngineProject.Resolve(settings.Engine, root);
+                if (settings.Resources != null && engine != EngineKind.Unity)
+                    throw new ArgumentException("--resources requires a Unity project.");
                 Task<string?>? updateNotice = null;
                 if (engine == EngineKind.Unity)
                 {
@@ -58,15 +87,19 @@ namespace ObFramework.Cli.Commands.Init
                     UnityTestScaffold.Validate(root);
                     if (!settings.SkipPackages) UnityProject.ValidateSdk(root, cancellationToken);
                 }
-                var resources = engine == EngineKind.Unity ? UnityProject.ResourceChoice(root) : "custom";
+                var resources = engine == EngineKind.Unity
+                    ? ParseResources(settings.Resources ?? UnityProject.ResourceChoice(root, "addressables"))
+                    : "custom";
                 var init = new InitContext(root, engine, settings.SkipDownload, cancellationToken)
                 {
                     Resources = resources,
+                    LubanPaths = settings.LubanPaths,
                     PackageVersion = settings.PackageVersion ?? UnityPackageInstaller.DefaultVersion,
                     Source = settings.Source == null ? null : (Uri.TryCreate(settings.Source, UriKind.Absolute, out var uri) ? (uri.IsFile ? uri.LocalPath : settings.Source) : Path.GetFullPath(settings.Source)),
                     SkipPackages = settings.SkipPackages
                 };
                 InitCliModule.CreatePipeline(engine).Execute(ref init);
+                if (settings.Gas) GasStarter.Install(init);
                 if (engine == EngineKind.Unity)
                 {
                     var checks = UnityDoctor.Check(root);

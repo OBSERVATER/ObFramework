@@ -10,6 +10,7 @@ namespace ObFramework.Cli.Commands.Init
             CancellationToken = cancellationToken;
         }
 
+        public ObFramework.Cli.Commands.Config.Modules.LubanSetupConfig? LubanPaths { get; set; }
         public string Resources { get; set; } = "custom";
         public string PackageVersion { get; set; } = ObFramework.Cli.Unity.UnityPackageInstaller.DefaultVersion;
         public string? Source { get; set; }
