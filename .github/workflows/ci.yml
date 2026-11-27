@@ -55,6 +55,20 @@ jobs:
           fi
           dotnet test ObFramework.Test/ObFramework.Test.csproj --configuration Release "${args[@]}"
 
+      - name: Get Unity adapter compile references
+        if: steps.version.outputs.version != ''
+        shell: bash
+        run: |
+          package="$RUNNER_TEMP/unityengine.modules.2022.3.58.nupkg"
+          managed="$RUNNER_TEMP/unity-references"
+          curl --fail --location --retry 3 --silent --show-error \
+            https://nuget.bepinex.dev/v3/package/unityengine.modules/2022.3.58/unityengine.modules.2022.3.58.nupkg \
+            --output "$package"
+          echo "1b8d71380d40a037cae8643a1b7d0d172b600c6e085b238aee87eca36f111349  $package" | sha256sum --check
+          mkdir -p "$managed/UnityEngine"
+          unzip -j "$package" lib/netstandard2.0/UnityEngine{,.CoreModule}.dll -d "$managed/UnityEngine"
+          printf 'UnityEditorDataRoot=%s\n' "$managed" >> "$GITHUB_ENV"
+
       - name: Find the compatible NuGet baseline
         id: baseline
         if: steps.version.outputs.version != ''
